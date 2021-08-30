@@ -1,0 +1,1006 @@
+#!/bin/bash
+
+arguments="$@"
+
+source ~/.bashrc
+
+chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
+run_dir=`echo $0 | cut -d'/' -f 1-${chars}`
+
+iodepth_list=""
+max_disks=""
+ioengine="libaio"
+block_size=""
+test_type="read,write"
+ct_disk_size="undef"
+jobs_max=""
+jobs_min="1"
+tested=0
+run_time=120
+disks_passed="grab_disks"
+tuning_info=""
+disks=""
+numb_disks=0
+regression=0
+io_engine_list=""
+njobs=0
+iodepth=0
+disk_size=0
+pbench_samples=5
+os_vendor=`uname -a | cut -d'.' -f8`
+file_count=0
+file_size=10
+fs_type="xfs"
+tools_git=https://github.com/dvalinrh/test_tools
+file_list=""
+file_size_opt=""
+lvm_disk=0
+mount_location=/fio
+etcd_opts=0
+data_sync=0
+pbench_options=""
+mount_index=0
+maximum_disks=0
+jobs_list=""
+test_name="fio"
+working_dir=""
+use_pbench_version=0
+RESULTSDIR=""
+target_count=0
+
+
+usage()
+{
+	echo "Usage: $0"
+	echo "  --block_size: comma separated lists of block sizes to use"
+	echo "  --disk_size: size in M, use this as the size of the disk instead of lsblk"
+	echo "  --disks: comma separated list of disks to use."
+	echo "  --ioengine: comma separated list of ioengines to use"
+	echo "  --iodepth_list: how many ios are allowed outstanding"
+	echo "  --jobs_list: comma separated list of jobs, overrides jobs max and jobs_min, numa_node means use"
+	echo "    number of numa nodes or 2, which ever is greater"
+	echo "  --jobs_max: maximum number of jobs to run"
+	echo "  --jobs_min: minimum number of jobs to run"
+	echo "  --max_disks: maximum number of disks to run with"
+	echo "  --max_disks_only: Perform the run only with maximum disks"
+	echo "  --pbench_samples: number of times pbench is to run each data point, default is 5"
+	echo "  --regression: regression run"
+	echo "  --runtime: run for the designated period, 60 seconds is the default"
+	echo "  --test_type: type of io doing."
+	echo " --use_pbench_version: Instead of running the wrappers version"
+	echo "     of linpack, use pbench-linpack when pbench is requested"
+	source test_tools/general_setup --usage
+}
+#
+# Clone the repo that contains the common code and tools
+#
+found=0
+for arg in "$@"; do
+	if [ $found -eq 1 ]; then
+		tools_git=$arg
+		found=0
+	fi
+	if [[ $arg == "--tools_git" ]]; then
+		found=1
+	fi
+
+	if [[ $found -eq 2 ]]; then
+		string1=`echo $arg | cut -d: -f2 | sed "s/;/ /g"`
+		for i in $string1; do
+			if [[ $i == *"size"* ]]; then
+				ct_disk_size=`echo $i | cut -d'=' -f 2`
+				break
+			fi
+		done
+	fi
+	if [[ @arg == "--host_config" ]]; then
+		found=2
+	fi
+
+	#
+	# We do the usage check here, as we do not want to be calling
+	# the common parsers then checking for usage here.  Doing so will
+	# result in the script exiting with out giving the test options.
+	#
+	if [[ $arg == "--usage" ]]; then
+		usage $0
+	fi
+done
+
+#
+# Check to see if the test tools directory exists.  If it does, we do not need to
+# clone the repo.
+#
+if [ ! -d "test_tools" ]; then
+        git clone $tools_git
+        if [ $? -ne 0 ]; then
+                echo pulling git $tools_git failed.
+                exit 1
+        fi
+fi
+
+# Variables set by general setup.
+#
+# TOOLS_BIN: points to the tool directory
+# to_home_root: home directory
+# to_configuration: configuration information
+# to_times_to_run: number of times to run the test
+# to_pbench: Run the test via pbench
+# to_puser: User running pbench
+# to_run_label: Label for the run
+# to_user: User on the test system running the test
+# to_sys_type: for results info, basically aws, azure or local
+# to_sysname: name of the system
+# to_tuned_setting: tuned setting
+#
+
+source test_tools/general_setup "$@"
+
+#
+# Report information
+#
+report_info()
+{
+	echo $1 >> /tmp/log
+}
+
+obtain_avg()
+{
+	value=`grep "${1}" fio-result.txt | grep max | cut -d'=' -f ${2} | grep -v percentiles | cut -d',' -f 1`
+	nitems=0
+	calc="scale=2;("
+	field_separ=""
+	for val in $value; do
+		calc="${calc}${field_separ}$val"
+		let "nitems=$nitems+1"
+		field_separ="+"
+	done
+	calc="${calc})/${nitems}"
+	rtval=`echo $calc | bc`
+	echo $rtval
+}
+
+reduce_data()
+{
+	file=`ls -d fio* | head -n 1`
+
+	#
+	# Build the sub_dirs
+	#
+	rm -rf results*
+	cd $file
+	for list in `ls`; do
+		if [ -d "$list" ]; then
+			fname=`echo $list | cut -d'-' -f 2-30`
+			mkdir ../results_${fname}
+		fi
+	done
+	cd ..
+	rdir=`pwd`
+
+	#
+	# Now copy things to the proper place.
+	#
+	for list in `ls -d fio*`; do
+		pushd $list > /dev/null
+		njobs=`echo $list | cut -d'_' -f 8`
+		iodepth=`echo $list | cut -d'_'  -f 12`
+		ndisks=`echo $list | cut -d'_'  -f 3`
+		for dir in `ls`; do
+			if [ -d "$dir" ]; then
+				fname=`echo $dir | cut -d'-' -f 2-30`
+				cd $dir
+				bw=$(obtain_avg "bw" 5)
+				clat=$(obtain_avg "clat" 4)
+				slat=$(obtain_avg "slat" 4)
+				lat=$(obtain_avg " lat (usec" 4)
+				echo "${njobs}:${ndisks}:${iodepth}:${bw}" >> $rdir/results_${fname}/results_bw.csv
+				echo "${njobs}:${ndisks}:${iodepth}:${slat}" >> $rdir/results_${fname}/results_slat.csv
+				echo "${njobs}:${ndisks}:${iodepth}:${clat}" >> $rdir/results_${fname}/results_clat.csv
+				echo "${njobs}:${ndisks}:${iodepth}:${lat}" >> $rdir/results_${fname}/results_lat.csv
+				cd ..
+			fi
+		done
+		popd > /dev/null
+	done
+
+	#
+	# Now sort the results csv files and place headers
+	#
+	for list in `ls -d results_*`; do
+		pushd $list > /dev/null
+		op_and_size=`echo $list | cut -d'_' -f 2`
+		for ifile in `ls res*`; do
+			if [[ $ifile == *"bw"* ]]; then
+				echo "njobs:ndisks:iodepth:bw" >> results.csv
+			fi
+			if [[ $ifile == *"_lat"* ]]; then
+				echo "njobs:ndisks:iodepth:lat" >> results.csv
+			fi
+			if [[ $ifile == *"_clat"* ]]; then
+				echo "njobs:ndisks:iodepth:clat" >> results.csv
+			fi
+			if [[ $ifile == *"_slat"* ]]; then
+				echo "njobs:ndisks:iodepth:slat" >> results.csv
+			fi
+			sort -t : -k 3 -n $ifile >> results.csv
+			echo "" >> results.csv
+			cat  results.csv >> $working_dir/results_fio.csv
+		done
+		popd > /dev/null
+	done
+}
+
+reduce_io_data()
+{
+	aio_type=`ls -d fio* | cut -d'_' -f 10 | sort -u`
+
+	#
+	# First organize the data
+	#
+	for io_eng in $aio_type; do
+		mkdir $io_eng
+		cp -R *ioengine_${io_eng}* $io_eng
+		pushd $io_eng
+		numb_disks=`ls -d fio* | cut -d'_' -f 3 | sort -u`
+		for ndisks in $numb_disks; do
+			mkdir disks_${ndisks}
+			mv fio_ndisks_${ndisks}* disks_${ndisks}
+		done
+		popd
+	done
+
+	#
+	# Now process the fio data
+	#
+	for io_eng in $aio_type; do
+		pushd $io_eng
+		for disks in `ls -d disk*`; do
+			pushd $disks
+			reduce_data
+			popd
+		done
+	done
+}
+	
+# Create the required file systems.
+#
+create_and_mount_fs()
+{
+	dev_prefix="/dev"
+	disks_recorded=1
+	cd $to_home_root/$to_user
+
+	seper=""
+	if [ $lvm_disk -eq 1 ]; then
+		#
+		# As we are using lvm, there will only be one disk
+		#
+		numb_disks=1
+		max_disks=1
+		umount /perf1
+		#
+		# LVM requested.
+		#
+		lvm_disk_to_use=`echo $disks | sed "s/ /,/g"`
+		$TOOLS_BIN/lvm_create --devices ${lvm_disk_to_use} --lvm_vol fio --lvm_grp fio
+		if [ $? -ne 0 ]; then
+			echo $TOOLS_BIN/lvm_create --devices ${lvm_disk_to_use} --lvm_vol fio --lvm_grp fio failed
+			exit 1
+		fi
+		#
+		# Sanity setup
+		#
+		mkdir /perf1
+		#
+		# Create the filesystem.
+		#
+		$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio
+		if [ $? -ne 0 ]; then
+			echo $TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio failed
+			exit 1
+		fi
+		#
+		# Build the file list.
+		#
+		for findex in `seq 1 1 $file_count`; do
+			file_list=${file_list}${seper}/perf1/fio_file_${findex}
+			seper=" "
+		done
+	else
+		disks=`echo $disks | sed "s/,/ /g"`
+		#
+		# For each disk.
+		#
+		for device in $disks; do
+			mount_pnt=${mount_location}${mount_index}
+			#
+			# Sanity setup.
+			#
+			umount $mount_pnt >& /dev/null
+			mkdir -p ${mount_pnt} >& /dev/null
+			$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir $mount_pnt --device $device
+			if [ $? -ne 0 ]; then
+				echo $TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio failed
+				exit 1
+			fi
+			mount_list=${mount_list}${seper}${mount_pnt}
+			seper=" "
+			let "mount_index=${mount_index}+1"
+			#
+			# Build the file list for the mount point.
+			#
+			for findex in `seq 1 1 $file_count`; do
+				file_list=${file_list}${seper}/${mount_pnt}/fio_file_${findex}
+				seper=" "
+			done
+		done
+	fi
+	file_size_opt=${file_size}G
+}
+
+#
+# Retrieve general system information and if doing regression run, set the proper variables.
+#
+setup_run_information()
+{
+	numa_nodes=`lscpu | grep NUMA | grep CPU | wc -l`
+	numb_cpus=`lscpu | grep "^CPU(s)" | cut -d: -f 2`
+
+	report_info "Numa nodes: ${numa_nodes}"
+	report_info "cpus: ${numb_cpus}"
+
+	#
+	# Defaults common between regression runs and non regression runs.
+	#
+	if [[ $jobs_max == "" ]]; then
+		jobs_max=$numa_nodes
+	fi
+	if [[ $max_disks == "" ]]; then
+		max_disks=$numb_disks
+	fi
+
+	if [[ $iodepth_list == "" ]]; then
+		if [ $regression -eq 1 ]; then
+			iodepth_list="1 16 64"
+		else
+			iodepth_list="1 2 4 8 16 32"
+		fi
+	fi
+	if [[ $block_size == "" ]]; then
+		if [ $regression -eq 1 ]; then
+			block_size="1024"
+		else
+			block_size="4,1024"
+		fi
+	fi
+	io_engine_list=`echo $ioengine | sed "s/,/ /g"`
+}
+
+#
+# Retrieve the disks to use.
+#
+obtain_disks()
+{
+	if [[ $disks_passed == "grab_disks" ]]; then
+		results=`$TOOLS_BIN/grab_disks ${disks_passed}`
+		
+		#
+		# If no disks have been passed in, bail.  Note we do not check
+		# to make sure the disk exist.
+		#
+		if [ $? -ne 0 ]; then
+			echo grab disks failed.
+			exit 1
+		fi
+
+		max_disks=`echo $results | cut -d: -f 2`
+		disks=`echo $results | cut -d: -f 1`
+	else
+		disks=`echo $disks_passed | cut -d',' -f 1`
+		max_disks=`echo $disks | tr -d -c ' '  | awk '{ print length; }'`
+		let "max_disks=${max_disks}+1"
+	fi
+}
+
+#
+# Handle different locations of fio, and fix it so we will always find it
+# in /usr/local/bin.  If we do not have fio, bail out with an error.
+#
+install_fio()
+{
+	#
+	# fio may in /bin/fio but not /usr/local/bin/fio, handle the situation.
+	#
+	if [ -f "/usr/local/bin/fio" ]; then
+		report_info "fio installed in /usr/local/bin/fio"
+	else
+		report_info "fio not installed in /usr/local/bin/fio, trying /bin/fio"
+		if [ -f "/bin/fio" ]; then
+			report_info "fio found in /bin/fio, copying to /usr/local/bin/fio"
+			cp /bin/fio /usr/local/bin/fio
+		else
+			#
+			# fio does not appear to be installed, bail out.
+			#
+			echo fio does not exist in /bin either, aborting.
+			exit 1
+		fi
+	fi
+}
+
+#
+# Execute pbench-fio
+#
+pbench_fio_execute()
+{
+	disk_list=$1
+	disk_count=$2
+	if [ $use_pbench_version -eq 1 ]; then
+		local_config="bs_${block_size}_iod_${iodepth}_ndisks_${disk_count}_disksize_${ct_disk_size}_njobs_${njobs}"
+
+		report_info "pbench-fio ${pbench_target} --block-sizes ${block_size} --iodepth ${iodepth} --numjobs ${njobs} --ioengine ${ioengine} -t ${test_type} --config ${local_config} ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size"
+		pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size
+	else
+		 $TOOLS_BIN/execute_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11
+		 exit
+	fi
+}
+
+#
+# Create the file we need  for runnig fio outside of pbench.
+#
+build_run_file()
+{
+	io_size=$1
+	lioe=$2
+	liodepth=$3
+       	lnjobs=$4
+	lrtime=$5
+	ldisks_to_use=`echo $6 | sed "s/,/ /g"`
+	lop=$7
+
+	echo "[global]" > /tmp/fio_run
+	echo "bs=${io_size}" >> /tmp/fio_run
+	echo "runtime=${lrtime}" >> /tmp/fio_run
+	echo "ioengine=${lioe}" >> /tmp/fio_run
+	echo "iodepth=${liodepth}" >> /tmp/fio_run
+	echo "direct=1" >> /tmp/fio_run
+	echo "sync=$data_sync" >> /tmp/fio_run
+	echo "time_based=1" >> /tmp/fio_run
+	echo "clocksource=gettimeofday" >> /tmp/fio_run
+	echo "ramp_time=5" >> /tmp/fio_run
+	echo "write_bw_log=fio" >> /tmp/fio_run
+	echo "write_iops_log=fio" >> /tmp/fio_run
+	echo "write_lat_log=fio" >> /tmp/fio_run
+	if [[ $os_vendor != "amzn2" ]]; then
+		echo "log_avg_msec=1000" >> /tmp/fio_run
+		echo "write_hist_log=fio" >> /tmp/fio_run
+		echo "log_hist_msec=10000" >> /tmp/fio_run
+	fi
+	echo " " >> /tmp/fio_run
+	#
+	# Cycle through the disks or files.
+	#
+	if [[ $file_list != "" ]]; then
+		for file in $file_list; do
+			echo "[job-${file}]" >> /tmp/fio_run
+			echo "filename=${file}" >> /tmp/fio_run
+			echo "rw=${lop}" >> /tmp/fio_run
+			echo "size=${file_size_opt}" >> /tmp/fio_run
+			echo "numjobs=$lnjobs" >> /tmp/fio_run
+			echo " " >> /tmp/fio_run
+		done
+	else
+		for disk in $ldisks_to_use; do
+			echo "[job-${disk}]" >> /tmp/fio_run
+			echo "filename=${disk}" >> /tmp/fio_run
+			echo "rw=${lop}" >> /tmp/fio_run
+			echo "size=${disk_size}" >> /tmp/fio_run
+			echo "numjobs=$lnjobs" >> /tmp/fio_run
+			echo " " >> /tmp/fio_run
+		done
+	fi
+}
+
+#
+# Loop the io tests.
+#
+loop_io_tests()
+{
+	out_dir=$1
+	disk_count=$2
+	test_index=$3
+	io_size=$4
+
+	for io_test in $use_test; do
+		rdir=${out_dir}/${test_index}-${io_test}-${io_size}KiB
+		mkdir -p $rdir
+		local_config="bs_${io_size}_iod_${iodepth}_ndisks_${disk_count}_njobs_${njobs}_ioengine_${ioengine}"
+		#
+		# build the run file
+		#
+		build_run_file $ios $ioe $iodepth $njobs $run_time $disk_list $io_test
+		cp /tmp/fio_run ${out_dir}/file_run_${test_index}
+		let "test_index=${test_index}+1"
+		fio /tmp/fio_run > $rdir/fio-result.txt
+	done
+}
+
+#
+# Iterate through the block sizes
+#
+loop_block_sizes()
+{
+	out_dir=$1
+	disk_count=$2
+	test_index=$3
+
+	for io_size in $bs; do
+		if [ $to_pbench -eq 0 ]; then
+			ios=`echo "${io_size}*1024" | bc`
+		else
+			ios=$io_size
+		fi
+		loop_io_tests $out_dir $disk_count $test_index $io_size
+	done
+}
+
+#
+# Run fio outisde of the pbench harness.
+#
+straight_fio_execute()
+{
+	disk_count=$2
+	field_1=`date +%F | sed "s/-/./g"`
+	field_2=`date +%H"."%M"."%S`
+
+	use_test=`echo $test_type | sed "s/,/ /g"`
+	bs=`echo $block_size | sed "s/,/ /g"`
+	ioe=`echo $ioengine | sed "s/,/ /g"`
+	test_index=1;
+
+	for io_eng in $ioe; do
+		out_dir="export_fio_data/fio_ndisks_${disk_count}_disksize_${ct_disk_size}_njobs_${njobs}_ioengine_${ioengine}_iodepth_${iodepth}_${field_1}T${field_2}"
+		mkdir $out_dir
+		loop_block_sizes $out_dir $disk_count $test_index
+	done
+}
+
+fio_execute()
+{
+	if [ $to_pbench -eq 1 ]; then
+		pbench_fio_execute $1 $2
+	else
+		straight_fio_execute $1 $2
+	fi
+}
+
+#
+# Perform the full run.
+#
+run_sweep()
+{
+	disks_to_use=0
+	disks_used=1
+	low_done=0
+	disk_count=0
+
+	#
+	# Go through the disks. For testing purposes, we do 1,2 and then doubling of the
+	# the number of disks.  Do not forget to do max disks.
+	#
+
+	if [ $maximum_disks -eq 1 ]; then
+		disks_to_use=$max_disks
+		target_count=$max_disks
+		low_done=1
+		disks_used=3
+	fi
+	for i in $disks; do
+		if [ $disk_size -eq 0 ]; then
+			disk_size=`lsblk -b --output SIZE -n -d $i`
+		fi
+		if [ $disk_count -gt $max_disks ]; then
+			break
+		fi
+		#
+		# We run 1 then 2 disks then double from there.
+		#
+		if [ $disks_used -le 2 ]; then
+			if [ $disks_used == 1 ]; then
+				disk_list=$i	
+			else
+				disk_list=$disk_list","$i
+			fi
+			let "disk_count=$disk_count+1"
+			fio_execute $disk_list $disk_count
+			if [ $lvm_disk -eq 1 ]; then
+				break;
+			fi
+			let "disks_used=$disks_used+1"
+			continue
+		fi
+
+		#	
+		# Ok we now double the number of disks each time, up to the max disks
+		#
+		disk_list=$disk_list","$i
+		let "disk_count=$disk_count+1"
+		
+		if [ $low_done -eq 0 ]; then
+			low_done=1
+			disks_to_use=4
+		fi
+		#
+		# Run the test when we have the right number of disks.
+		#
+		if [ $disk_count -eq $disks_to_use ]; then
+			#
+			# First do the test, then bump $disks_to_use.
+			#
+			target_count=$disk_count
+			fio_execute $disk_list $disk_count
+			#
+			# Did we just do max disks, if so break out.
+			#
+			if [ $disks_to_use -eq $max_disks ]; then
+				break;
+			fi
+			#
+			# Double the number of disks, if the results is greater then
+			# max disks, then set disks_to_use to be max_disks.
+			#
+			let "disks_to_use=$disks_to_use*2"
+			if [ $disks_to_use -gt $max_disks ]; then
+				disks_to_use=$max_disks
+
+			fi
+		fi
+	done
+}
+
+#
+# We are doing a regression run.
+#
+run_regression()
+{
+	#
+	# First one disk, then all of them.
+	#
+	disk_list=`echo $disks | cut -d' ' -f1`
+	disk_size=`lsblk -b --output SIZE -n -d $disk_list`
+	fio_execute $disk_list 1
+
+	#
+	# Now all of the disks
+	#
+	if [ $max_disks != 1 ]; then
+		disk_list=`echo $disks | sed "s/ /,/g"`
+		fio_execute $disk_list $max_disks
+	fi
+}
+
+#
+# Execute the fio test.  Loop for njobs, iodepth and ioegine.  run_sweep and run_regression
+# will handle the disks.
+#
+execute_test()
+{
+	if [[ $jobs_list == "" ]]; then
+		job_list_separ=""
+		njobs=$jobs_min
+		while [ $njobs -le $jobs_max ]; do
+			jobs_list="${jobs_list}${job_list_separ}${njobs}"
+			job_list_separ=","
+			if [ $njobs -eq $jobs_max ]; then 
+				break
+			fi
+			let "njobs=$njobs*2"
+			#
+			# Only do the max jobs designated.
+			#
+			if [ $njobs -gt $jobs_max ]; then
+				njobs=$jobs_max
+			fi
+		done
+	fi
+	perform_jobs=`echo $jobs_list | sed "s/,/ /g"`
+
+	for njobs in  ${perform_jobs}; do
+		disk_used=0
+		for iodepth in $iodepth_list; do
+			tested=0
+			for ioengine in  $io_engine_list; do
+				if [[ $regression -eq 0 ]]; then
+					run_sweep
+				else
+					run_regression
+				fi
+			done
+		done
+	done
+
+	#
+	# Done testing, process the results.
+	#
+	additional_info=`echo $additional_info | cut -d' ' -f 1`
+	results_prefix=$additional_info"user_"$to_puser"_instance_"$to_sysname"_numb_disks_"$numb_disks"_"$tuning_info
+	user=$additional_info"user_"$to_user"_instance_"$to_sysname"_numb_disks_"$numb_disks
+
+	if [ $to_pbench -eq 1 ]; then
+		cd /var/lib/pbench-agent/
+		mkdir export_fio_data
+		pwd
+		for i in `ls -d fio_*`; do
+        		mkdir export_fio_data/$i
+        		cp $i/result.csv export_fio_data/$i
+        		cp $i/result.txt export_fio_data/$i
+		done
+		if [ $etcd_opts -eq 1 ]; then
+			tar hcf /tmp/results_etcd_fio_${to_tuned_setting}.tar export_fio_data
+		else
+			tar hcf /tmp/results_pbench_fio_${to_tuned_setting}.tar export_fio_data
+		fi
+		value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test fio --pbench_user $pbench_user --run_label $to_run_label`
+		results_prefix=`echo $value | cut -d: -f 2`
+		hostname=`echo $value | cut -d: -f 2`
+
+		if [ $etcd_opts -eq 0 ]; then
+			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/fio_run
+		else
+			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/etcd_run
+		fi
+		tar hcf /tmp/results_pbench_fio_${to_tuned_setting}.tar export_fio_data
+	else
+		cp /tmp/log export_fio_data
+		rtdir=`pwd`
+		cd export_fio_data
+		working_dir=`pwd`
+		reduce_io_data
+		cd $rtdir
+		tar hcf /tmp/results_fio_${to_tuned_setting}.tar export_fio_data
+	fi
+}
+
+#
+# Define options
+#
+ARGUMENT_LIST=(
+	"block_size"
+	"disks"
+	"disk_size"
+	"file_count"
+	"file_size"
+	"fs_type"
+	"iodepth_list"
+	"ioengine"
+	"jobs_list"
+	"jobs_max"
+	"jobs_min"
+	"max_disks"
+	"pbench_options"
+	"pbench_samples"
+	"runtime"
+	"test_type"
+)
+
+NO_ARGUMENTS=(
+	"debug"
+	"etcd_opts"
+	"help"
+	"lvm"
+	"max_disks_only"
+	"regression"
+	"use_pbench_version"
+)
+
+dnf -y install fio
+# read arguments
+opts=$(getopt \
+    --longoptions "$(printf "%s:," "${ARGUMENT_LIST[@]}")" \
+    --longoptions "$(printf "%s," "${NO_ARGUMENTS[@]}")" \
+    --name "$(basename "$0")" \
+    --options "h" \
+    -- "$@"
+)
+
+eval set --$opts
+
+while [[ $# -gt 0 ]]; do
+        case "$1" in
+		--block_size)
+			block_size=${2}
+			shift 2
+		;;
+		--disk_size)
+			disk_size=${2}
+			shift 2
+		;;
+		--disks)
+			disks_passed=${2}
+			shift 2
+		;;
+		--etcd_opts)
+			test_name="etcd"
+			etcd_opts=1
+			shift 1
+		;;
+		--file_count)
+			file_count=${2}
+			shift 2
+		;;
+		--file_size)
+			file_size=${2}
+			shift 2
+		;;
+		--fs_type)
+			fs_type=${2}
+			shift 2
+		;;
+		--help)
+			usage
+		;;
+		--iodepth_list)
+			iodepth_list=${2}
+			shift 2
+		;;
+		--ioengine)
+			ioengine=${2}
+			shift 2
+		;;
+		--lvm)
+			lvm_disk=1
+			shift 1
+		;;
+		--jobs_list)
+			#
+			# Need to convert "numa_node" to actual numa_node value
+			#
+			if [[ ${2} == *"numa_node"* ]];then
+				numa_node=`lscpu | grep "NUMA node(s):"| cut -d ':' -f2 | sed "s/ //g"`
+				if [[ $numa_node == "1" ]]; then
+					numa_node=2
+				fi
+				jobs_list=`echo ${2} | sed "s/numa_node/${numa_node}/g"`
+			else
+				jobs_list=${2}
+			fi
+			shift 2
+		;;
+		--jobs_max)
+			jobs_max=${2}
+			shift 2
+		;;
+		--jobs_min)
+			jobs_min=${2}
+			shift 2
+		;;
+		--max_disks)
+			max_disks=${2}
+			shift 2
+		;;
+		--max_disks_only)
+			maximum_disks=1
+			shift 1
+		;;
+		--pbench_options)
+			fio_options=${2}
+			shift 2
+		;;
+		--pbench_samples)
+			pbench_samples=${2}
+			shift 2
+		;;
+		--regression)
+			regression=1
+			shift 1
+		;;
+		--runtime)
+			run_time=${2}
+			shift 2
+		;;
+		--test_type)
+			test_type=${2}
+			shift 2
+		;;
+		--use_pbench_version)
+			use_pbench_version=1
+			shift 1
+		;;
+		-h)
+			usage $0
+		;;
+		--)
+			break; 
+		;;
+		*)
+			report_info "option not found ${1}"
+			usage $0
+		;;
+        esac
+done
+#
+# One results dir for the entire run. Only create when $to_pbench is
+# 0.  The directory will get created when we call back in.
+#
+if [ $to_pbench -eq 0 ]; then
+	RESULTSDIR=export_fio_data_$(date "+%Y.%m.%d-%H.%M.%S")
+	rm export_fio_data
+	mkdir ${RESULTSDIR}
+	ln -s ${RESULTSDIR} export_fio_data
+fi
+
+install_fio
+iodepth_list=`echo $iodepth_list | sed "s/,/ /g"`
+
+obtain_disks
+
+if [[ $ct_disk_size == "undef" ]]; then
+	disk_temp=`mktemp /tmp/confg.XXXXX`
+	disk_temp1=`mktemp /tmp/confg.XXXXX`
+	#
+	# Need the disk size, grab the size of the disks present.
+	#
+	disk_items=`echo $disks | sed "s/,/ /g"`
+	for i in $disk_items; do
+		fdisk -l $i | grep -P '^(?=.*Disk)(?=.*sectors)' | cut -d: -f2 | sed "s/ /_/g" | sed "s/,//g" | cut -d'_' -f2,3 >> $disk_temp
+	done
+	sort -u $disk_temp >> $disk_temp1
+	ct_disk_size=""
+	ct_disk_separ=""
+	for i in `cat $disk_temp1`; do
+		ct_disk_size=${i}${ct_disk_size}${ct_disk_separ}
+		ct_disk_separ='_'
+	done
+	rm $disk_temp
+	rm $disk_temp1
+fi
+
+setup_run_information
+
+#
+# Special run setup for etcd sim.
+#
+if [ $etcd_opts -eq 1 ]; then
+	block_size=2300
+	iodepth_list=1
+	ioe=sync
+	file_size_opt=22m
+	data_sync=1
+	jobs_min=1
+	jobs_max=1
+	njobs=1
+	if [ $file_count -eq 0 ]; then
+		file_count=1
+	fi
+	#
+	# For pbench
+	#
+	pbench_options="--file-size ${file_size_opt} --sync ${data_sync}"
+fi
+
+if [ $file_count -ne 0 ]; then
+	#
+	# Handle filesystem creation.
+	#
+	create_and_mount_fs
+	pfile_list=`echo ${file_list} | sed "s/ /,/g"`
+	pbench_target="--targets ${pfile_list}"
+else
+	#
+	# Targets are the disks.
+	#
+	pdisk_list=`echo ${disks} | sed "s/ /,/g"`
+	pbench_target="--targets ${pdisk_list}"
+fi
+
+execute_test
+
+if [ $file_count -ne 0 ]; then
+	if [ $lvm_disk -eq 1 ]; then
+		$TOOLS_BIN/lvm_delete --lvm_vol fio --lvm_grp fio --mount_pnt /perf1
+	else
+		$TOOLS_BIN/umount_filesystems --mount_pnt ${mount_location} --number_mount_pnts ${mount_index}
+	fi
+fi
