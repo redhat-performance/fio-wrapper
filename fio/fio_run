@@ -27,6 +27,14 @@ source ~/.bashrc
 chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
 run_dir=`echo $0 | cut -d'/' -f 1-${chars}`
 
+os_info=`uname -a`
+ubuntu=0
+if [[ $os_info == *"Ubuntu"* ]]; then
+	ubuntu=1
+else
+	yum install pbench
+fi
+
 iodepth_list=""
 max_disks=""
 ioengine="libaio"
@@ -388,11 +396,7 @@ setup_run_information()
 		fi
 	fi
 	if [[ $block_size == "" ]]; then
-		if [ $regression -eq 1 ]; then
-			block_size="1024"
-		else
-			block_size="4,1024"
-		fi
+		block_size="4,1024"
 	fi
 	io_engine_list=`echo $ioengine | sed "s/,/ /g"`
 }
@@ -472,7 +476,7 @@ pbench_fio_execute()
 #
 build_run_file()
 {
-	io_size=$1
+	lio_size=$1
 	lioe=$2
 	liodepth=$3
        	lnjobs=$4
@@ -481,7 +485,7 @@ build_run_file()
 	lop=$7
 
 	echo "[global]" > /tmp/fio_run
-	echo "bs=${io_size}" >> /tmp/fio_run
+	echo "bs=${lio_size}" >> /tmp/fio_run
 	echo "runtime=${lrtime}" >> /tmp/fio_run
 	echo "ioengine=${lioe}" >> /tmp/fio_run
 	echo "iodepth=${liodepth}" >> /tmp/fio_run
@@ -531,12 +535,12 @@ loop_io_tests()
 	out_dir=$1
 	disk_count=$2
 	test_index=$3
-	io_size=$4
+	loop_io_size=$4
 
 	for io_test in $use_test; do
-		rdir=${out_dir}/${test_index}-${io_test}-${io_size}KiB
+		rdir=${out_dir}/${test_index}-${io_test}-${loop_io_size}KiB
 		mkdir -p $rdir
-		local_config="bs_${io_size}_iod_${iodepth}_ndisks_${disk_count}_njobs_${njobs}_ioengine_${ioengine}"
+		local_config="bs_${loop_io_size}_iod_${iodepth}_ndisks_${disk_count}_njobs_${njobs}_ioengine_${ioengine}"
 		#
 		# build the run file
 		#
@@ -815,7 +819,15 @@ NO_ARGUMENTS=(
 	"use_pbench_version"
 )
 
-dnf -y install fio
+#
+# Make sure latest is installed. 
+
+if [ $ubuntu -eq 0 ]; then
+	yum -y install fio
+else
+	apt install -y fio
+fi
+
 # read arguments
 opts=$(getopt \
     --longoptions "$(printf "%s:," "${ARGUMENT_LIST[@]}")" \
