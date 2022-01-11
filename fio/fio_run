@@ -771,9 +771,9 @@ execute_test()
 		hostname=`echo $value | cut -d: -f 2`
 
 		if [ $etcd_opts -eq 0 ]; then
-			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/fio_run
+			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/fio_run_rt=${run_time}
 		else
-			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/etcd_run
+			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/etcd_run_rt=${run_time}
 		fi
 		tar hcf /tmp/results_pbench_fio_${to_tuned_setting}.tar export_fio_data
 	else
