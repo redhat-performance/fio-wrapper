@@ -140,11 +140,11 @@ done
 # clone the repo.
 #
 if [ ! -d "test_tools" ]; then
-        git clone $tools_git
-        if [ $? -ne 0 ]; then
-                echo pulling git $tools_git failed.
-                exit 1
-        fi
+	git clone $tools_git
+	if [ $? -ne 0 ]; then
+		echo pulling git $tools_git failed.
+		exit 1
+	fi
 fi
 
 # Variables set by general setup.
@@ -153,6 +153,7 @@ fi
 # to_home_root: home directory
 # to_configuration: configuration information
 # to_times_to_run: number of times to run the test
+# to_pbench_copy: Copy the data to the pbench repository, not move_it.
 # to_pbench: Run the test via pbench
 # to_puser: User running pbench
 # to_run_label: Label for the run
@@ -466,8 +467,8 @@ pbench_fio_execute()
 		report_info "pbench-fio ${pbench_target} --block-sizes ${block_size} --iodepth ${iodepth} --numjobs ${njobs} --ioengine ${ioengine} -t ${test_type} --config ${local_config} ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size"
 		pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size
 	else
-		 $TOOLS_BIN/execute_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11
-		 exit
+		$TOOLS_BIN/execute_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11
+		exit
 	fi
 }
 
@@ -479,7 +480,7 @@ build_run_file()
 	lio_size=$1
 	lioe=$2
 	liodepth=$3
-       	lnjobs=$4
+	lnjobs=$4
 	lrtime=$5
 	ldisks_to_use=`echo $6 | sed "s/,/ /g"`
 	lop=$7
@@ -757,9 +758,9 @@ execute_test()
 		mkdir export_fio_data
 		pwd
 		for i in `ls -d fio_*`; do
-        		mkdir export_fio_data/$i
-        		cp $i/result.csv export_fio_data/$i
-        		cp $i/result.txt export_fio_data/$i
+			mkdir export_fio_data/$i
+			cp $i/result.csv export_fio_data/$i
+			cp $i/result.txt export_fio_data/$i
 		done
 		if [ $etcd_opts -eq 1 ]; then
 			tar hcf /tmp/results_etcd_fio_${to_tuned_setting}.tar export_fio_data
@@ -771,9 +772,9 @@ execute_test()
 		hostname=`echo $value | cut -d: -f 2`
 
 		if [ $etcd_opts -eq 0 ]; then
-			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/fio_run_rt=${run_time}
+			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/fio_run_rt=${run_time} --copy $to_pbench_copy
 		else
-			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/etcd_run_rt=${run_time}
+			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/etcd_run_rt=${run_time} --copy $to_pbench_copy
 		fi
 		tar hcf /tmp/results_pbench_fio_${to_tuned_setting}.tar export_fio_data
 	else
@@ -830,17 +831,17 @@ fi
 
 # read arguments
 opts=$(getopt \
-    --longoptions "$(printf "%s:," "${ARGUMENT_LIST[@]}")" \
-    --longoptions "$(printf "%s," "${NO_ARGUMENTS[@]}")" \
-    --name "$(basename "$0")" \
-    --options "h" \
-    -- "$@"
+	--longoptions "$(printf "%s:," "${ARGUMENT_LIST[@]}")" \
+	--longoptions "$(printf "%s," "${NO_ARGUMENTS[@]}")" \
+	--name "$(basename "$0")" \
+	--options "h" \
+	-- "$@"
 )
 
 eval set --$opts
 
 while [[ $# -gt 0 ]]; do
-        case "$1" in
+	case "$1" in
 		--block_size)
 			block_size=${2}
 			shift 2
@@ -950,7 +951,7 @@ while [[ $# -gt 0 ]]; do
 			report_info "option not found ${1}"
 			usage $0
 		;;
-        esac
+	esac
 done
 #
 # One results dir for the entire run. Only create when $to_pbench is
