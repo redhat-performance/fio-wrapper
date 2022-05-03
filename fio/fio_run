@@ -31,8 +31,6 @@ os_info=`uname -a`
 ubuntu=0
 if [[ $os_info == *"Ubuntu"* ]]; then
 	ubuntu=1
-else
-	yum install pbench
 fi
 
 iodepth_list=""
