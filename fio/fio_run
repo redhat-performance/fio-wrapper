@@ -24,8 +24,12 @@ arguments="$@"
 
 source ~/.bashrc
 
-chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
-run_dir=`echo $0 | cut -d'/' -f 1-${chars}`
+if [[ $0 == "./"* ]]; then
+	run_dir=`pwd`
+else
+	chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
+	run_dir=`echo $0 | cut -d'/' -f 1-${chars}`
+fi
 
 os_info=`uname -a`
 ubuntu=0
@@ -57,7 +61,7 @@ os_vendor=`uname -a | cut -d'.' -f8`
 file_count=0
 file_size=10
 fs_type="xfs"
-tools_git=https://github.com/dvalinrh/test_tools
+tools_git=https://github.com/redhat-performance/test_tools-wrappers
 file_list=""
 file_size_opt=""
 lvm_disk=0
@@ -138,7 +142,7 @@ done
 # clone the repo.
 #
 if [ ! -d "test_tools" ]; then
-	git clone $tools_git
+	git clone $tools_git test_tools
 	if [ $? -ne 0 ]; then
 		echo pulling git $tools_git failed.
 		exit 1
