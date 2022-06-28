@@ -239,7 +239,7 @@ reduce_data()
 				cd ..
 			fi
 		done
-		cp ${curdir}/meta_data.yml $rdir/results_${fname}
+		cp ${curdir}/meta_data.yml ${curdir}/export_fio_data
 		popd > /dev/null
 	done
 
