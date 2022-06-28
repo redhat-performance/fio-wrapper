@@ -24,13 +24,13 @@ arguments="$@"
 
 source ~/.bashrc
 
+curdir=`pwd`
 if [[ $0 == "./"* ]]; then
 	chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
 	if [[ $chars == 1 ]]; then
 		run_dir=`pwd`
 	else
 		run_dir=`echo $0 | cut -d'/' -f 1-${chars} | cut -d'.' -f2-`
-		curdir=`pwd`
 		run_dir="${curdir}${run_dir}"
 	fi
 else
@@ -239,6 +239,7 @@ reduce_data()
 				cd ..
 			fi
 		done
+		cp ${curdir}/meta_data.yml $rdir/results_${fname}
 		popd > /dev/null
 	done
 
@@ -476,6 +477,7 @@ pbench_fio_execute()
 		report_info "pbench-fio ${pbench_target} --block-sizes ${block_size} --iodepth ${iodepth} --numjobs ${njobs} --ioengine ${ioengine} -t ${test_type} --config ${local_config} ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size"
 		pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size
 	else
+		cd ${curdir}
 		$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats
 		exit
 	fi
