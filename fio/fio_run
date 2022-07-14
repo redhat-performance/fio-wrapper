@@ -44,6 +44,7 @@ if [[ $os_info == *"Ubuntu"* ]]; then
 	ubuntu=1
 fi
 
+run_results="Ran"
 iodepth_list=""
 max_disks=""
 ioengine="libaio"
@@ -84,6 +85,15 @@ working_dir=""
 use_pbench_version=0
 RESULTSDIR=""
 target_count=0
+
+if [ ! -f "/tmp/${test_name}.out" ]; then
+        command="${0} $@"
+        echo $command
+        $command &> /tmp/${test_name}.out
+        cat /tmp/${test_name}.out
+        rm /tmp/${test_name}.out
+        exit
+fi
 
 
 usage()
@@ -560,6 +570,10 @@ loop_io_tests()
 		cp /tmp/fio_run ${out_dir}/file_run_${test_index}
 		let "test_index=${test_index}+1"
 		fio /tmp/fio_run > $rdir/fio-result.txt
+		lines=`wc -l $rdir/fio-result.txt | cut -d' ' -f 1`
+		if [ $lines -lt 2 ]; then
+			run_results="Failed"
+		fi
 	done
 }
 
@@ -795,6 +809,8 @@ execute_test()
 		working_dir=`pwd`
 		reduce_io_data
 		cd $rtdir
+		mv /tmp/${test_name}.out export_fio_data
+		echo $run_results >> export_fio_data/test_results_report
 		tar hcf /tmp/results_fio_${to_tuned_setting}.tar export_fio_data
 	fi
 }
