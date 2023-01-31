@@ -792,12 +792,14 @@ execute_test()
 		else
 			tar hcf /tmp/results_pbench_fio_${to_tuned_setting}.tar export_fio_data
 		fi
-		value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test fio --pbench_user $pbench_user --run_label $to_run_label`
+		value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test fio --pbench_user $to_user --run_label $to_run_label`
 		results_prefix=`echo $value | cut -d: -f 2`
 		hostname=`echo $value | cut -d: -f 2`
 
+		ts=`date "+%Y.%m.%dT%H.%M.%S"`
+		subdir="pbench-user-benchmark-${to_user}-${test_name}_test_${ts}"
 		if [ $etcd_opts -eq 0 ]; then
-			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/fio_run_rt=${run_time} --copy $to_pbench_copy
+			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/fio/${sub_dir} --copy $to_pbench_copy
 		else
 			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/etcd_run_rt=${run_time} --copy $to_pbench_copy
 		fi
