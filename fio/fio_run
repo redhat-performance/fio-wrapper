@@ -465,11 +465,16 @@ install_fio()
 			report_info "fio found in /bin/fio, copying to /usr/local/bin/fio"
 			cp /bin/fio /usr/local/bin/fio
 		else
-			#
-			# fio does not appear to be installed, bail out.
-			#
-			echo fio does not exist in /bin either, aborting.
-			exit 1
+			if [ -f "/usr/bin/fio" ]; then
+				report_info "fio found in /usr/bin/fio, copying to /usr/local/bin/fio"
+				cp /usr/bin/fio /usr/local/bin/fio
+			else
+				#
+				# fio does not appear to be installed, bail out.
+				#
+				echo fio does not exist in /bin either, aborting.
+				exit 1
+			fi
 		fi
 	fi
 }
