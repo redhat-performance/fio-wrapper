@@ -90,11 +90,19 @@ if [ ! -f "/tmp/${test_name}.out" ]; then
         command="${0} $@"
         echo $command
         $command &> /tmp/${test_name}.out
-        cat /tmp/${test_name}.out
-        rm /tmp/${test_name}.out
-        exit
+	rtc=$?
+	if [ -f /tmp/${test_name}.out ]; then
+        	cat /tmp/${test_name}.out
+        	rm /tmp/${test_name}.out
+	fi
+        exit $rtc
 fi
 
+exit_out()
+{
+	echo $1
+	exit $2
+}
 
 usage()
 {
@@ -115,7 +123,7 @@ usage()
 	echo "  --runtime: run for the designated period, 60 seconds is the default"
 	echo "  --test_type: type of io doing."
 	echo " --use_pbench_version: Instead of running the wrappers version"
-	echo "     of linpack, use pbench-linpack when pbench is requested"
+	echo "     of fio, use pbench-fio when pbench is requested"
 	source test_tools/general_setup --usage
 }
 #
@@ -161,8 +169,7 @@ done
 if [ ! -d "test_tools" ]; then
 	git clone $tools_git test_tools
 	if [ $? -ne 0 ]; then
-		echo pulling git $tools_git failed.
-		exit 1
+		exit_out "pulling git $tools_git failed." 1
 	fi
 fi
 
@@ -334,8 +341,7 @@ create_and_mount_fs()
 		lvm_disk_to_use=`echo $disks | sed "s/ /,/g"`
 		$TOOLS_BIN/lvm_create --devices ${lvm_disk_to_use} --lvm_vol fio --lvm_grp fio
 		if [ $? -ne 0 ]; then
-			echo $TOOLS_BIN/lvm_create --devices ${lvm_disk_to_use} --lvm_vol fio --lvm_grp fio failed
-			exit 1
+			exit_out "$TOOLS_BIN/lvm_create --devices ${lvm_disk_to_use} --lvm_vol fio --lvm_grp fio failed" 1
 		fi
 		#
 		# Sanity setup
@@ -346,8 +352,7 @@ create_and_mount_fs()
 		#
 		$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio
 		if [ $? -ne 0 ]; then
-			echo $TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio failed
-			exit 1
+			exit_out "$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio failed" 1
 		fi
 		#
 		# Build the file list.
@@ -370,8 +375,7 @@ create_and_mount_fs()
 			mkdir -p ${mount_pnt} >& /dev/null
 			$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir $mount_pnt --device $device
 			if [ $? -ne 0 ]; then
-				echo $TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio failed
-				exit 1
+				exit_out "$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio failed" 1
 			fi
 			mount_list=${mount_list}${seper}${mount_pnt}
 			seper=" "
@@ -435,8 +439,7 @@ obtain_disks()
 		# to make sure the disk exist.
 		#
 		if [ $? -ne 0 ]; then
-			echo grab disks failed.
-			exit 1
+			exit_out "grab disks failed." 1
 		fi
 
 		max_disks=`echo $results | cut -d: -f 2`
@@ -472,8 +475,7 @@ install_fio()
 				#
 				# fio does not appear to be installed, bail out.
 				#
-				echo fio does not exist in /bin either, aborting.
-				exit 1
+				exit_out "fio does not exist in /bin either, aborting." 1
 			fi
 		fi
 	fi
@@ -491,10 +493,15 @@ pbench_fio_execute()
 
 		report_info "pbench-fio ${pbench_target} --block-sizes ${block_size} --iodepth ${iodepth} --numjobs ${njobs} --ioengine ${ioengine} -t ${test_type} --config ${local_config} ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size"
 		pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size
+		if [ $rtc != 0 ]; then
+			exit_out "pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size" 1
+		fi
 	else
 		cd ${curdir}
 		$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats
-		exit
+		if [ $rtc != 0 ]; then
+			exit_out "$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats failed." 1
+		fi
 	fi
 }
 
@@ -1069,3 +1076,4 @@ if [ $file_count -ne 0 ]; then
 		$TOOLS_BIN/umount_filesystems --mount_pnt ${mount_location} --number_mount_pnts ${mount_index}
 	fi
 fi
+exit 0
