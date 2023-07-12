@@ -3,8 +3,8 @@ Automation wrapper for fio
 Description:
                 Fio spawns a number of threads or processes doing a particular type
                 of I/O action as specified by the user. fio takes a number of global
-                parameters, each inherited by the thread unless otherwise parameters
-                given to them overriding that setting is given. The typical use of
+                parameters, each inherited by the thread unless other parameters
+                provided for that thread overrides the global settings. The typical use of
                 fio is to write a job file matching the I/O load one wants to simulate.
 
 Location of underlying workload: https://fio.readthedocs.io/en/latest/fio_doc.html
@@ -40,6 +40,7 @@ If regression option is selected, only one set of runs with all the disks.
 	io depth: 1 16 64
 ```
 Options
+```
 Usage: fio-wrapper/fio/fio_run
   --block_size: comma separated lists of block sizes to use
   --disk_size: size in M, use this as the size of the disk instead of lsblk
