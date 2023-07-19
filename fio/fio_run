@@ -21,10 +21,62 @@
 # Automate the exection of the fio workload.
 
 arguments="$@"
+disk_options=""
+
+provide_disks()
+{
+	echo You need to designate disks, following are currently not mounted.
+	tools_bin/grab_disks grab_disks
+	cat disks
+	echo "Enter comma separated list of devices to use: "
+	read devices_to_use
+	device_list=`echo $devices_to_use | sed "s/,/,\/dev\//g"`
+	device_list=/dev/${device_list}
+	disk_options="--disks ${device_list}"
+}
+
+gen_args_back="$@"
+echo $1
+disks_found=0
+i=1
+j=$#
+while [ $i -le $j ]
+do
+        #
+        # Ansible causing problems again, getting passed }} for some reason from random workloads, filter it out.
+        #
+        case "$1" in
+		--disks)
+			disks_found=1
+			break
+		;;
+		--usage)
+			#
+			# Do not need disks
+			#
+			disks_found=1
+			break
+		;;
+		--)
+			break
+		;;
+		*)
+			i=$((i + 1))
+			shift 1
+		;;
+	esac
+done
+
+if [ $disks_found -eq 0 ]; then
+        provide_disks
+fi
+
+set -- ${gen_args_back}
 
 source ~/.bashrc
 
 curdir=`pwd`
+
 if [[ $0 == "./"* ]]; then
 	chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
 	if [[ $chars == 1 ]]; then
@@ -33,9 +85,15 @@ if [[ $0 == "./"* ]]; then
 		run_dir=`echo $0 | cut -d'/' -f 1-${chars} | cut -d'.' -f2-`
 		run_dir="${curdir}${run_dir}"
 	fi
+elif [[ $0 != "/"* ]]; then
+	dir=`echo $0 | rev | cut -d'/' -f2- | rev`
+	run_dir="${curdir}/${dir}"
 else
 	chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
 	run_dir=`echo $0 | cut -d'/' -f 1-${chars}`
+	if [[ $run_dir != "/"* ]]; then
+		run_dir=${curdir}/${run_dir}
+	fi
 fi
 
 ubuntu=0
@@ -55,7 +113,7 @@ jobs_max=""
 jobs_min="1"
 tested=0
 run_time=120
-disks_passed="grab_disks"
+disks_passed=""
 tuning_info=""
 disks=""
 numb_disks=0
@@ -87,8 +145,7 @@ RESULTSDIR=""
 target_count=0
 
 if [ ! -f "/tmp/${test_name}.out" ]; then
-        command="${0} $@"
-        echo $command
+        command="${0} $@ ${disk_options}"
         $command &> /tmp/${test_name}.out
 	rtc=$?
 	if [ -f /tmp/${test_name}.out ]; then
@@ -425,6 +482,9 @@ setup_run_information()
 	fi
 	io_engine_list=`echo $ioengine | sed "s/,/ /g"`
 }
+
+
+arguments="$@"
 
 #
 # Retrieve the disks to use.
@@ -993,6 +1053,25 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 #
+# Verify device info.
+#
+if [ $file_count -eq 0 ]; then
+	#
+	# Using disks
+	#
+	if [[ $disks_passed != "grab_disks" ]]; then
+		device_list=`echo $disks_passed | sed "s/,/ /g"`
+		for item in $device_list; do
+			value=`file $item`
+			echo $value | grep "block special" > /dev/null
+			if [ $? -ne 0 ]; then
+				exit_out "Error: $item is not a block device" 1
+			fi
+		done
+	fi
+fi
+
+#
 # One results dir for the entire run. Only create when $to_pbench is
 # 0.  The directory will get created when we call back in.
 #
@@ -1007,6 +1086,7 @@ install_fio
 iodepth_list=`echo $iodepth_list | sed "s/,/ /g"`
 
 obtain_disks
+
 
 if [[ $ct_disk_size == "undef" ]]; then
 	disk_temp=`mktemp /tmp/confg.XXXXX`
