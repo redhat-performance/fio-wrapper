@@ -98,7 +98,8 @@ fi
 
 os_info=`uname -a`
 ubuntu=0
-if [[ $os_info == *"Ubuntu"* ]]; then
+uname -a | grep -q -E 'Ubuntu|tegra'
+if [[ $? -eq 0 ]]; then
 	ubuntu=1
 fi
 
@@ -109,7 +110,10 @@ ioengine="libaio"
 block_size=""
 test_type="read,write"
 ct_disk_size="undef"
-jobs_max=""
+jobs_max==`lscpu | grep NUMA | grep CPU | wc -l`
+if [ $jobs_max -eq 0 ]; then
+	jobs_max=1
+fi
 jobs_min="1"
 tested=0
 run_time=120
