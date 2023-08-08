@@ -36,7 +36,6 @@ provide_disks()
 }
 
 gen_args_back="$@"
-echo $1
 disks_found=0
 i=1
 j=$#
@@ -110,7 +109,7 @@ ioengine="libaio"
 block_size=""
 test_type="read,write"
 ct_disk_size="undef"
-jobs_max==`lscpu | grep NUMA | grep CPU | wc -l`
+jobs_max=`lscpu | grep NUMA | grep CPU | wc -l`
 if [ $jobs_max -eq 0 ]; then
 	jobs_max=1
 fi
