@@ -95,7 +95,6 @@ else
 	fi
 fi
 
-os_info=`uname -a`
 ubuntu=0
 uname -a | grep -q -E 'Ubuntu|tegra'
 if [[ $? -eq 0 ]]; then
