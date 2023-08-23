@@ -36,7 +36,6 @@ provide_disks()
 }
 
 gen_args_back="$@"
-echo $1
 disks_found=0
 i=1
 j=$#
@@ -109,7 +108,10 @@ ioengine="libaio"
 block_size=""
 test_type="read,write"
 ct_disk_size="undef"
-jobs_max="1"
+jobs_max=`lscpu | grep NUMA | grep CPU | wc -l`
+if [ $jobs_max -eq 0 ]; then
+	jobs_max=1
+fi
 jobs_min="1"
 tested=0
 run_time=120
@@ -505,9 +507,8 @@ obtain_disks()
 		max_disks=`echo $results | cut -d: -f 2`
 		disks=`echo $results | cut -d: -f 1`
 	else
-		disks=`echo $disks_passed | cut -d',' -f 1`
-		max_disks=`echo $disks | tr -d -c ' '  | awk '{ print length; }'`
-		let "max_disks=${max_disks}+1"
+		disks=`echo $disks_passed | sed "s/,/ /g"`
+		max_disks=`echo $disks | wc -w`
 	fi
 }
 
