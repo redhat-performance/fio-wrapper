@@ -917,7 +917,7 @@ NO_ARGUMENTS=(
 #
 # Make sure latest is installed. 
 
-test_tools --pacakges fio --no_install $to_no_install
+test_tools/package_tool --packages fio --no_install $to_no_install
 # read arguments
 opts=$(getopt \
 	--longoptions "$(printf "%s:," "${ARGUMENT_LIST[@]}")" \
