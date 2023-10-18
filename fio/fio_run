@@ -95,12 +95,6 @@ else
 	fi
 fi
 
-ubuntu=0
-uname -a | grep -q -E 'Ubuntu|tegra'
-if [[ $? -eq 0 ]]; then
-	ubuntu=1
-fi
-
 run_results="Ran"
 iodepth_list=""
 max_disks=""
@@ -923,12 +917,7 @@ NO_ARGUMENTS=(
 #
 # Make sure latest is installed. 
 
-if [ $ubuntu -eq 0 ]; then
-	yum -y install fio
-else
-	apt install -y fio
-fi
-
+test_tools/package_tool --packages fio --no_install $to_no_install
 # read arguments
 opts=$(getopt \
 	--longoptions "$(printf "%s:," "${ARGUMENT_LIST[@]}")" \
