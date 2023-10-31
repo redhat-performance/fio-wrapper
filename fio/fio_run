@@ -636,9 +636,14 @@ loop_io_tests()
 		build_run_file $ios $ioe $iodepth $njobs $run_time $disk_list $io_test
 		cp /tmp/fio_run ${out_dir}/file_run_${test_index}
 		let "test_index=${test_index}+1"
-		fio /tmp/fio_run > $rdir/fio-result.txt
+		fio --output-format=normal,json /tmp/fio_run > $rdir/full-fio-result.txt
+		rtc=$?
+
+		grep -Ezo "\{.*\}" $rdir/full-fio-result.txt | tr -d '\000' > $rdir/fio-result.json
+		grep -Fvxf $rdir/fio-result.json $rdir/full-fio-result.txt > $rdir/fio-result.txt
+
 		lines=`wc -l $rdir/fio-result.txt | cut -d' ' -f 1`
-		if [ $lines -lt 2 ]; then
+		if [ $lines -lt 2 || $rtc -ne 0 ]; then
 			run_results="Failed"
 		fi
 	done
