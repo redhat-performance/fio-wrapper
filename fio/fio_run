@@ -848,12 +848,23 @@ execute_test()
 	if [ $to_pbench -eq 1 ]; then
 		cd /var/lib/pbench-agent/
 		mkdir export_fio_data
-		pwd
-		for i in `ls -d fio_*`; do
-			mkdir export_fio_data/$i
-			cp $i/result.csv export_fio_data/$i
-			cp $i/result.txt export_fio_data/$i
-		done
+		cp ${curdir}/meta_data* export_fio_data
+		ls -d pbench-user* > /dev/null
+		if [ $? -ne 0 ]; then
+			for i in `ls -d fio_*`; do
+				mkdir export_fio_data/$i
+				cp ${curdir}/meta_data*yml $i
+				cp $i/result.csv export_fio_data/$i
+				cp $i/result.txt export_fio_data/$i
+			done
+		else
+			for i in `ls -d pbench-user*`; do
+				mkdir export_fio_data/$i
+				cp ${curdir}/meta_data*yml $i
+				cp $i/result.csv export_fio_data/$i
+				cp $i/result.txt export_fio_data/$i
+			done
+		fi
 		if [ $etcd_opts -eq 1 ]; then
 			tar hcf /tmp/results_etcd_fio_${to_tuned_setting}.tar export_fio_data
 		else
