@@ -844,6 +844,21 @@ execute_test()
 	additional_info=`echo $additional_info | cut -d' ' -f 1`
 	results_prefix=$additional_info"user_"$to_puser"_instance_"$to_sysname"_numb_disks_"$numb_disks"_"$tuning_info
 	user=$additional_info"user_"$to_user"_instance_"$to_sysname"_numb_disks_"$numb_disks
+	pushd $working_dir > /dev/null
+	if [[ ! -f results_fio.csv ]]; then
+		echo Failed, results_fio.csv missing >> test_results_report
+	else
+		value=`head -2 results_fio.csv | tail -1`
+		jobs=`echo $value | cut -d':' -f 1`
+		tput=`echo $value | cut -d':' -f 4 | cut -d'.' -f 1`
+
+		if [[ $jobs -gt 0 ]] && [[ $tput -gt 0 ]]; then
+			echo Ran >> test_results_report
+		else
+			echo Failed >> test_results_report
+		fi
+	fi
+	popd > /dev/null
 
 	if [ $to_pbench -eq 1 ]; then
 		cd /var/lib/pbench-agent/
