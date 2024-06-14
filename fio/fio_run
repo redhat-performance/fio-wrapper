@@ -1083,7 +1083,7 @@ if [ $file_count -eq 0 ]; then
 			if [ $? -ne 0 ]; then
 				exit_out "Error: $item is not a block device" 1
 			fi
-			tools_bin/detect_mounts $item
+			test_tools/detect_mounts $item
 			if [ $? -ne 0 ]; then
 				exit_out "Error: $item is mounted." 1
 			fi
