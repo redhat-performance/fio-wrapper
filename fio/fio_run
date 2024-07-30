@@ -871,22 +871,22 @@ execute_test()
 			done
 		fi
 		if [ $use_pbench_version -eq 1 ]; then
-			pushd  ${curdir}/export_fio_data > /dev/null
+			cd  ${curdir}/export_fio_data
 			cnt=`ls fio*/*csv | wc -l`
 			if [ $cnt -eq 0 ]; then
 				echo Failed pbench, no csv files present >> test_results_report
 			else
 				echo Ran pbench, at least some of the csv files are present. >> test_results_report
 			fi
-                	popd > /dev/null
+			cd -
 		fi
-		pushd  ${curdir} > /dev/null
+		cd  ${curdir}
 		if [ $etcd_opts -eq 1 ]; then
 			tar hcf /tmp/results_etcd_fio_${to_tuned_setting}.tar export_fio_data
 		else
 			tar hcf /tmp/results_pbench_fio_${to_tuned_setting}.tar export_fio_data
 		fi
-		popd > /dev/null
+		cd -
 		value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test fio --pbench_user $pbench_user --run_label $to_run_label`
 		results_prefix=`echo $value | cut -d: -f 2`
 		hostname=`echo $value | cut -d: -f 2`
