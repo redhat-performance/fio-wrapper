@@ -20,8 +20,10 @@
 #
 # Automate the exection of the fio workload.
 
+test_name="fio"
 arguments="$@"
 disk_options=""
+curdir=`pwd`
 
 provide_disks()
 {
@@ -134,9 +136,9 @@ pbench_options=""
 mount_index=0
 maximum_disks=0
 jobs_list=""
-test_name="fio"
 working_dir=""
 use_pbench_version=0
+results_version="1.0"
 RESULTSDIR=""
 target_count=0
 
@@ -316,10 +318,14 @@ reduce_data()
 	#
 	# Now sort the results csv files and place headers
 	#
+	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_fio.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $results_version --test_name $test_name
 	for list in `ls -d results_*`; do
 		pushd $list > /dev/null
 		op_and_size=`echo $list | cut -d'_' -f 2`
+		op=`echo "$op_and_size" | cut -d'-' -f1`
+		size=`echo "$op_and_size" | cut -d'-' -f2`
 		for ifile in `ls res*`; do
+			$TOOLS_BIN/test_header_info --test_name ${test_name}  --info_in_dir_name "$file 2,3 4,5,6 7,8 9,10" --meta_output "op: $op" --meta_output "size: $size" --results_file results.csv
 			if [[ $ifile == *"bw"* ]]; then
 				echo "njobs:ndisks:iodepth:bw" >> results.csv
 			fi
@@ -334,6 +340,7 @@ reduce_data()
 			fi
 			sort -t : -k 3 -n $ifile >> results.csv
 			echo "" >> results.csv
+
 			cat  results.csv >> $working_dir/results_fio.csv
 		done
 		popd > /dev/null
@@ -639,7 +646,7 @@ loop_io_tests()
 		build_run_file $ios $ioe $iodepth $njobs $run_time $disk_list $io_test
 		cp /tmp/fio_run ${out_dir}/file_run_${test_index}
 		let "test_index=${test_index}+1"
-		fio /tmp/fio_run > $rdir/fio-result.txt
+		fio /tmp/fio_run >> $rdir/fio-result.txt
 		lines=`wc -l $rdir/fio-result.txt | cut -d' ' -f 1`
 		if [ $lines -lt 2 ]; then
 			run_results="Failed"
