@@ -342,6 +342,7 @@ reduce_data()
 			echo "" >> results.csv
 
 			cat  results.csv >> $working_dir/results_fio.csv
+			rm results.csv
 		done
 		popd > /dev/null
 	done
