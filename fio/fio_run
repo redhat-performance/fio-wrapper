@@ -163,6 +163,7 @@ usage()
 {
 	echo "Usage: $0"
 	echo "  --block_size: comma separated lists of block sizes to use"
+	echo "  --bw_unit: Bandwidth unit in summary csv file (KiB/s,MiB/s,GiB/s). Default MiB/s."
 	echo "  --disk_size: size in M, use this as the size of the disk instead of lsblk"
 	echo "  --disks: comma separated list of disks to use."
 	echo "  --ioengine: comma separated list of ioengines to use"
@@ -171,6 +172,7 @@ usage()
 	echo "    number of numa nodes or 2, which ever is greater"
 	echo "  --jobs_max: maximum number of jobs to run"
 	echo "  --jobs_min: minimum number of jobs to run"
+	echo "  --lat_unit: Latency  unit in summary csv file (nsec, usec, msec, sec). Default usec."
 	echo "  --max_disks: maximum number of disks to run with"
 	echo "  --max_disks_only: Perform the run only with maximum disks"
 	echo "  --pbench_samples: number of times pbench is to run each data point, default is 5"
@@ -254,20 +256,154 @@ report_info()
 	echo $1 >> /tmp/log
 }
 
+convert_unit()
+{
+	unit=$1
+	base=1
+
+	if [[ $unit == "KiB/s" ]]; then
+		base=1024
+	elif [[ $unit == "MiB/s" ]]; then
+		base=`echo 1024*1024 |bc`
+	elif [[ $unit == "GiB/s" ]]; then
+		base=`echo 1024*1024*1024 |bc`
+	elif [[ $unit == "sec" ]]; then
+		base=`echo 1000*1000*1000 | bc`
+	elif [[ $unit == "msec" ]]; then
+		base=`echo 1000*1000 | bc`
+	elif [[ $unit == "usec" ]]; then
+		base=1000
+	elif [[ $unit == "nsec" ]]; then
+		base=1
+	else
+		echo unknown unit $unit
+		exit 1
+	fi
+	echo $base
+}
+
 obtain_avg()
 {
-	value=`grep "${1}" fio-result.txt | grep max | cut -d'=' -f ${2} | grep -v percentiles | cut -d',' -f 1`
+	use_avg=$4
+	stat=$1
+	unit=$3
+	field=$2
+
+	base=1
+	tmpfile=`mktemp /tmp/file_results.XXXXX`
+	grep "${stat}" fio-result.txt | grep max | grep -v percentiles | grep avg > $tmpfile
+	base=$(convert_unit $unit)
 	nitems=0
 	calc="scale=2;("
 	field_separ=""
-	for val in $value; do
-		calc="${calc}${field_separ}$val"
+	while IFS= read -r results
+	do
+		#
+		# First get the unit field.
+		#
+		cnvt=1
+		uf=`echo $results | cut -d'(' -f 2 | cut -d')' -f 1 | sed "s/ //g"`
+		value=`echo $results | cut -d'=' -f ${field} | cut -d',' -f 1`
+		cnvt=$(convert_unit $uf)
+		calc="${calc}${field_separ}${value}*${cnvt}"
 		let "nitems=$nitems+1"
 		field_separ="+"
-	done
-	calc="${calc})/${nitems}"
-	rtval=`echo $calc | bc`
-	echo $rtval
+	done <  "$tmpfile"
+	sum="${calc})/$base"
+	total=`echo $sum | bc`
+	if [ $use_avg -eq 1 ]; then
+		val=`echo ${total}/$nitems | bc`
+	else
+		val=$total
+	fi
+	echo ${total}:$unit
+	rm $tmpfile
+}
+
+report_line()
+{
+	field=$1
+	fprefix=$2
+	run_line="$3"
+	ndisk=$4
+	jobs=$5
+	iodepth=$6
+	device=$7
+	index=$8
+
+	unit=`echo $run_line |cut -d'(' -f 2 | cut -d')' -f 1 | sed "s/ //g"`
+	avg=`echo $run_line |cut -d'=' -f $index  | cut -d',' -f 1`
+	if [[ ! -f ${fprefix}_individ_${field}.csv ]]; then
+		echo "# devices:# jobs:io depth:device:avg:unit" > ${fprefix}_individ_${field}.csv
+	fi
+	echo $ndisk:$jobs:$iodepth:$device:$avg:$unit >> ${fprefix}_individ_${field}.csv
+}
+
+report_proc_info()
+{
+	fprefix=$1
+	jobs=$2
+	iodepeth=$3
+	ndisk=$4
+	start=0
+	device_fnd=0
+	rfile=$rdir/results_${fname}/individ_reuslts
+	while IFS= read -r run_line
+	do
+		if [[ $run_line == *"percentiles"* ]]; then
+			continue
+		fi
+		if [[ $run_line == "Starting"* ]]; then
+			start=1
+			continue
+		fi
+		if [ $start -ne 1 ]; then
+			continue
+		fi
+		#
+		# Get the device
+		#
+		if [[ $run_line == "job-"* ]]; then
+			device=`echo "$run_line" | cut -d'/' -f 2- | cut -d':' -f 1`
+			device="/"$device
+			device_fnd=1
+			continue;
+		fi
+
+		if [ $device_fnd -ne 1 ]; then
+			continue
+		fi
+		#
+		# Report slat
+		#
+		if [[ $run_line == *"slat"* ]]; then
+			report_line slat $fprefix "$run_line" $ndisk $jobs $iodepth $device 4
+			continue;
+		fi
+		#
+		# Report clat
+		#
+		if [[ $run_line == *"clat"* ]]; then
+			report_line clat $fprefix "$run_line" $ndisk $jobs $iodepth $device 4
+			continue;
+		fi
+		#
+		# Report lat
+		#
+		if [[ $run_line == *"lat"* ]]; then
+			report_line lat $fprefix "$run_line" $ndisk $jobs $iodepth $device 4
+			continue;
+		fi
+		#
+		# Report bw
+		#
+		if [[ $run_line == *" bw"* ]]; then
+			report_line bw $fprefix "$run_line" $ndisk $jobs $iodepth $device 5
+			device_fnd=0
+			continue;
+		fi
+	done < fio-result.txt
+
 }
 
 reduce_data()
@@ -298,20 +434,29 @@ reduce_data()
 		ndisks=`echo $list | cut -d'_'  -f 3`
 		for dir in `ls`; do
 			if [ -d "$dir" ]; then
+				#
+				# Consolidate the individual processes.
+				#
 				fname=`echo $dir | cut -d'-' -f 2-30`
 				cd $dir
-				bw=$(obtain_avg "bw" 5)
-				clat=$(obtain_avg "clat" 4)
-				slat=$(obtain_avg "slat" 4)
-				lat=$(obtain_avg " lat (usec" 4)
+				bw=$(obtain_avg "bw" 5 "$bw_unit" 0)
+				clat=$(obtain_avg "clat" 4 $lat_unit 1)
+				slat=$(obtain_avg "slat" 4 $lat_unit 1)
+				lat=$(obtain_avg " lat (" 4 $lat_unit 1)
 				echo "${njobs}:${ndisks}:${iodepth}:${bw}" >> $rdir/results_${fname}/results_bw.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${slat}" >> $rdir/results_${fname}/results_slat.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${clat}" >> $rdir/results_${fname}/results_clat.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${lat}" >> $rdir/results_${fname}/results_lat.csv
+				#
+				# Report individual processes.
+				#
+				report_proc_info $rdir/results_${fname}/individ_reuslts $njobs $iodepth $ndisks
 				cd ..
 			fi
 		done
-		cp ${curdir}/meta_data.yml ${curdir}/export_fio_data
+		if [[ -f ${curdir}/meta_data.yml ]] && [[ ! -f ${curdir}/export_fio_data/meta_data.yml ]]; then
+			cp ${curdir}/meta_data.yml ${curdir}/export_fio_data/meta_data.yml
+		fi
 		popd > /dev/null
 	done
 
@@ -327,22 +472,21 @@ reduce_data()
 		for ifile in `ls res*`; do
 			$TOOLS_BIN/test_header_info --test_name ${test_name}  --info_in_dir_name "$file 2,3 4,5,6 7,8 9,10" --meta_output "op: $op" --meta_output "size: $size" --results_file results.csv
 			if [[ $ifile == *"bw"* ]]; then
-				echo "njobs:ndisks:iodepth:bw" >> results.csv
+				echo "njobs:ndisks:iodepth:bw:unit" >> results.csv
 			fi
 			if [[ $ifile == *"_lat"* ]]; then
-				echo "njobs:ndisks:iodepth:lat" >> results.csv
+				echo "njobs:ndisks:iodepth:lat:unit" >> results.csv
 			fi
 			if [[ $ifile == *"_clat"* ]]; then
-				echo "njobs:ndisks:iodepth:clat" >> results.csv
+				echo "njobs:ndisks:iodepth:clat:unit" >> results.csv
 			fi
 			if [[ $ifile == *"_slat"* ]]; then
-				echo "njobs:ndisks:iodepth:slat" >> results.csv
+				echo "njobs:ndisks:iodepth:slat:unit" >> results.csv
 			fi
 			sort -t : -k 3 -n $ifile >> results.csv
 			echo "" >> results.csv
 
 			cat  results.csv >> $working_dir/results_fio.csv
-			rm results.csv
 		done
 		popd > /dev/null
 	done
@@ -358,13 +502,13 @@ reduce_io_data()
 	for io_eng in $aio_type; do
 		mkdir $io_eng
 		cp -R *ioengine_${io_eng}* $io_eng
-		pushd $io_eng
+		pushd $io_eng > /dev/null
 		numb_disks=`ls -d fio* | cut -d'_' -f 3 | sort -u`
 		for ndisks in $numb_disks; do
 			mkdir disks_${ndisks}
 			mv fio_ndisks_${ndisks}* disks_${ndisks}
 		done
-		popd
+		popd > /dev/null
 	done
 
 	#
@@ -373,9 +517,9 @@ reduce_io_data()
 	for io_eng in $aio_type; do
 		pushd $io_eng
 		for disks in `ls -d disk*`; do
-			pushd $disks
+			pushd $disks > /dev/null
 			reduce_data
-			popd
+			popd > /dev/null
 		done
 	done
 }
@@ -855,8 +999,6 @@ execute_test()
 	additional_info=`echo $additional_info | cut -d' ' -f 1`
 	results_prefix=$additional_info"user_"$to_puser"_instance_"$to_sysname"_numb_disks_"$numb_disks"_"$tuning_info
 	user=$additional_info"user_"$to_user"_instance_"$to_sysname"_numb_disks_"$numb_disks
-	pushd $working_dir > /dev/null
-	popd > /dev/null
 
 	if [ $to_pbench -eq 1 ]; then
 		cd /var/lib/pbench-agent/
@@ -922,6 +1064,7 @@ execute_test()
 #
 ARGUMENT_LIST=(
 	"block_size"
+	"bw_unit"
 	"disks"
 	"disk_size"
 	"file_count"
@@ -932,6 +1075,7 @@ ARGUMENT_LIST=(
 	"jobs_list"
 	"jobs_max"
 	"jobs_min"
+	"lat_unit"
 	"max_disks"
 	"pbench_options"
 	"pbench_samples"
@@ -964,10 +1108,16 @@ opts=$(getopt \
 
 eval set --$opts
 
+bw_unit="KiB/s"
+lat_unit="usec"
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--block_size)
 			block_size=${2}
+			shift 2
+		;;
+		--bw_unit)
+			bw_unit=${2}
 			shift 2
 		;;
 		--disk_size)
@@ -1033,6 +1183,10 @@ while [[ $# -gt 0 ]]; do
 			jobs_min=${2}
 			shift 2
 		;;
+		--lat_unit)
+			lat_unit=${2}
+			shift 2
+                ;;
 		--max_disks)
 			max_disks=${2}
 			shift 2
