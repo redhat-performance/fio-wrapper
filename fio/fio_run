@@ -347,7 +347,7 @@ report_proc_info()
 	ndisk=$4
 	start=0
 	device_fnd=0
-	rfile=$rdir/results_${fname}/individ_reuslts
+	rfile=$rdir/results_${fname}/individ_results
 	while IFS= read -r run_line
 	do
 		if [[ $run_line == *"percentiles"* ]]; then
@@ -450,7 +450,7 @@ reduce_data()
 				#
 				# Report individual processes.
 				#
-				report_proc_info $rdir/results_${fname}/individ_reuslts $njobs $iodepth $ndisks
+				report_proc_info $rdir/results_${fname}/individ_results $njobs $iodepth $ndisks
 				cd ..
 			fi
 		done
@@ -716,7 +716,7 @@ pbench_fio_execute()
 }
 
 #
-# Create the file we need  for runnig fio outside of pbench.
+# Create the file we need  for running fio outside of pbench.
 #
 build_run_file()
 {
@@ -819,7 +819,7 @@ loop_block_sizes()
 }
 
 #
-# Run fio outisde of the pbench harness.
+# Run fio outside of the pbench harness.
 #
 straight_fio_execute()
 {
