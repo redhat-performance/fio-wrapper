@@ -301,10 +301,12 @@ reduce_data()
 				fname=`echo $dir | cut -d'-' -f 2-30`
 				cd $dir
 				bw=$(obtain_avg "bw" 5)
+				iops=$(obtain_avg "iops" 4)
 				clat=$(obtain_avg "clat" 4)
 				slat=$(obtain_avg "slat" 4)
 				lat=$(obtain_avg " lat (usec" 4)
 				echo "${njobs}:${ndisks}:${iodepth}:${bw}" >> $rdir/results_${fname}/results_bw.csv
+				echo "${njobs}:${ndisks}:${iodepth}:${iops}" >> $rdir/results_${fname}/results_iops.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${slat}" >> $rdir/results_${fname}/results_slat.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${clat}" >> $rdir/results_${fname}/results_clat.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${lat}" >> $rdir/results_${fname}/results_lat.csv
@@ -329,6 +331,9 @@ reduce_data()
 			if [[ $ifile == *"bw"* ]]; then
 				echo "njobs:ndisks:iodepth:bw" >> results.csv
 			fi
+			if [[ $ifile == *"iops"* ]]; then
+                                echo "njobs:ndisks:iodepth:iops" >> results.csv
+                        fi
 			if [[ $ifile == *"_lat"* ]]; then
 				echo "njobs:ndisks:iodepth:lat" >> results.csv
 			fi
