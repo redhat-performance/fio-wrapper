@@ -20,8 +20,10 @@
 #
 # Automate the exection of the fio workload.
 
+test_name="fio"
 arguments="$@"
 disk_options=""
+curdir=`pwd`
 
 provide_disks()
 {
@@ -134,9 +136,9 @@ pbench_options=""
 mount_index=0
 maximum_disks=0
 jobs_list=""
-test_name="fio"
 working_dir=""
 use_pbench_version=0
+results_version="1.0"
 RESULTSDIR=""
 target_count=0
 
@@ -299,10 +301,12 @@ reduce_data()
 				fname=`echo $dir | cut -d'-' -f 2-30`
 				cd $dir
 				bw=$(obtain_avg "bw" 5)
+				iops=$(obtain_avg "iops" 4)
 				clat=$(obtain_avg "clat" 4)
 				slat=$(obtain_avg "slat" 4)
 				lat=$(obtain_avg " lat (usec" 4)
 				echo "${njobs}:${ndisks}:${iodepth}:${bw}" >> $rdir/results_${fname}/results_bw.csv
+				echo "${njobs}:${ndisks}:${iodepth}:${iops}" >> $rdir/results_${fname}/results_iops.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${slat}" >> $rdir/results_${fname}/results_slat.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${clat}" >> $rdir/results_${fname}/results_clat.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${lat}" >> $rdir/results_${fname}/results_lat.csv
@@ -316,13 +320,20 @@ reduce_data()
 	#
 	# Now sort the results csv files and place headers
 	#
+	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_fio.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $results_version --test_name $test_name
 	for list in `ls -d results_*`; do
 		pushd $list > /dev/null
 		op_and_size=`echo $list | cut -d'_' -f 2`
+		op=`echo "$op_and_size" | cut -d'-' -f1`
+		size=`echo "$op_and_size" | cut -d'-' -f2`
 		for ifile in `ls res*`; do
+			$TOOLS_BIN/test_header_info --test_name ${test_name}  --info_in_dir_name "$file 2,3 4,5,6 7,8 9,10" --meta_output "op: $op" --meta_output "size: $size" --results_file results.csv
 			if [[ $ifile == *"bw"* ]]; then
 				echo "njobs:ndisks:iodepth:bw" >> results.csv
 			fi
+			if [[ $ifile == *"iops"* ]]; then
+                                echo "njobs:ndisks:iodepth:iops" >> results.csv
+                        fi
 			if [[ $ifile == *"_lat"* ]]; then
 				echo "njobs:ndisks:iodepth:lat" >> results.csv
 			fi
@@ -334,7 +345,9 @@ reduce_data()
 			fi
 			sort -t : -k 3 -n $ifile >> results.csv
 			echo "" >> results.csv
+
 			cat  results.csv >> $working_dir/results_fio.csv
+			rm results.csv
 		done
 		popd > /dev/null
 	done
@@ -548,9 +561,12 @@ pbench_fio_execute()
 
 		report_info "pbench-fio ${pbench_target} --block-sizes ${block_size} --iodepth ${iodepth} --numjobs ${njobs} --ioengine ${ioengine} -t ${test_type} --config ${local_config} ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size"
 		pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size
-		if [ $rtc != 0 ]; then
+		if [ $? != 0 ]; then
 			exit_out "pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size" 1
 		fi
+		cp -R /var/pbench-agent/*fio* ${curdir}/export_fio_data
+		working_dir=${curdir}/export_fio_data
+		mkdir ${curdir}/export_fio_data
 	else
 		cd ${curdir}
 		$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats
@@ -636,7 +652,7 @@ loop_io_tests()
 		build_run_file $ios $ioe $iodepth $njobs $run_time $disk_list $io_test
 		cp /tmp/fio_run ${out_dir}/file_run_${test_index}
 		let "test_index=${test_index}+1"
-		fio --output-format=normal,json /tmp/fio_run > $rdir/full-fio-result.txt
+		fio --output-format=normal,json /tmp/fio_run >> $rdir/full-fio-result.txt
 		rtc=$?
 
 		grep -Ezo "\{.*\}" $rdir/full-fio-result.txt | tr -d '\000' > $rdir/fio-result.json
@@ -683,7 +699,7 @@ straight_fio_execute()
 	test_index=1;
 
 	for io_eng in $ioe; do
-		out_dir="export_fio_data/fio_ndisks_${disk_count}_disksize_${ct_disk_size}_njobs_${njobs}_ioengine_${ioengine}_iodepth_${iodepth}_${field_1}T${field_2}"
+		out_dir="${curdir}/export_fio_data/fio_ndisks_${disk_count}_disksize_${ct_disk_size}_njobs_${njobs}_ioengine_${ioengine}_iodepth_${iodepth}_${field_1}T${field_2}"
 		mkdir $out_dir
 		loop_block_sizes $out_dir $disk_count $test_index
 	done
@@ -849,21 +865,46 @@ execute_test()
 	additional_info=`echo $additional_info | cut -d' ' -f 1`
 	results_prefix=$additional_info"user_"$to_puser"_instance_"$to_sysname"_numb_disks_"$numb_disks"_"$tuning_info
 	user=$additional_info"user_"$to_user"_instance_"$to_sysname"_numb_disks_"$numb_disks
+	pushd $working_dir > /dev/null
+	popd > /dev/null
 
 	if [ $to_pbench -eq 1 ]; then
 		cd /var/lib/pbench-agent/
-		mkdir export_fio_data
-		pwd
-		for i in `ls -d fio_*`; do
-			mkdir export_fio_data/$i
-			cp $i/result.csv export_fio_data/$i
-			cp $i/result.txt export_fio_data/$i
-		done
+		mkdir ${curdir}/export_fio_data
+		cp ${curdir}/meta_data* ${curdir}/export_fio_data
+		ls -d pbench-user* > /dev/null
+		if [ $? -ne 0 ]; then
+			for i in `ls -d fio_*`; do
+				mkdir ${curdir}/export_fio_data/$i
+				cp ${curdir}/meta_data*yml $i
+				cp $i/result.csv ${curdir}/export_fio_data/$i
+				cp $i/result.txt ${curdir}/export_fio_data/$i
+			done
+		else
+			for i in `ls -d pbench-user*`; do
+				mkdir ${curdir}/export_fio_data/$i
+				cp ${curdir}/meta_data*yml $i
+				cp $i/result.csv ${curdir}/export_fio_data/$i
+				cp $i/result.txt ${curdir}/export_fio_data/$i
+			done
+		fi
+		if [ $use_pbench_version -eq 1 ]; then
+			cd  ${curdir}/export_fio_data
+			cnt=`ls fio*/*csv | wc -l`
+			if [ $cnt -eq 0 ]; then
+				echo Failed pbench, no csv files present >> test_results_report
+			else
+				echo Ran pbench, at least some of the csv files are present. >> test_results_report
+			fi
+			cd -
+		fi
+		cd  ${curdir}
 		if [ $etcd_opts -eq 1 ]; then
 			tar hcf /tmp/results_etcd_fio_${to_tuned_setting}.tar export_fio_data
 		else
 			tar hcf /tmp/results_pbench_fio_${to_tuned_setting}.tar export_fio_data
 		fi
+		cd -
 		value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test fio --pbench_user $pbench_user --run_label $to_run_label`
 		results_prefix=`echo $value | cut -d: -f 2`
 		hostname=`echo $value | cut -d: -f 2`
@@ -873,18 +914,17 @@ execute_test()
 		else
 			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/etcd_run_rt=${run_time} --copy $to_pbench_copy
 		fi
-		tar hcf /tmp/results_pbench_fio_${to_tuned_setting}.tar export_fio_data
 	else
-		cp /tmp/log export_fio_data
+		cp /tmp/log ${curdir}/export_fio_data
 		rtdir=`pwd`
-		cd export_fio_data
+		cd ${curdir}/export_fio_data
 		working_dir=`pwd`
 		reduce_io_data
 		cd $rtdir
-		mv /tmp/${test_name}.out export_fio_data
-		echo $run_results >> export_fio_data/test_results_report
-		tar hcf /tmp/results_fio_${to_tuned_setting}.tar export_fio_data
+		mv /tmp/${test_name}.out ${curdir}/export_fio_data
+		echo $run_results >> ${curdir}/export_fio_data/test_results_report
 	fi
+	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir ${RESULTSDIR} --test_name $test_name --tuned_setting=$to_tuned_setting --version NONE --user $to_user
 }
 
 #
@@ -1062,6 +1102,10 @@ if [ $file_count -eq 0 ]; then
 			if [ $? -ne 0 ]; then
 				exit_out "Error: $item is not a block device" 1
 			fi
+			test_tools/detect_mounts $item
+			if [ $? -ne 0 ]; then
+				exit_out "Error: $item is mounted." 1
+			fi
 		done
 	fi
 fi
@@ -1071,10 +1115,12 @@ fi
 # 0.  The directory will get created when we call back in.
 #
 if [ $to_pbench -eq 0 ]; then
-	RESULTSDIR=export_fio_data_$(date "+%Y.%m.%d-%H.%M.%S")
+	RESULTSDIR=${curdir}/export_fio_data_$(date "+%Y.%m.%d-%H.%M.%S")
 	rm export_fio_data
 	mkdir ${RESULTSDIR}
-	ln -s ${RESULTSDIR} export_fio_data
+	ln -s ${RESULTSDIR} ${curdir}/export_fio_data
+else
+	RESULTSDIR=${curdir}/export_fio_data
 fi
 
 install_fio
