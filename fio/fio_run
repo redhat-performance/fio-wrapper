@@ -653,6 +653,7 @@ loop_io_tests()
 		cp /tmp/fio_run ${out_dir}/file_run_${test_index}
 		let "test_index=${test_index}+1"
 		fio /tmp/fio_run >> $rdir/fio-result.txt
+		mv *.log $rdir 		# preserve raw data
 		lines=`wc -l $rdir/fio-result.txt | cut -d' ' -f 1`
 		if [ $lines -lt 2 ]; then
 			run_results="Failed"
