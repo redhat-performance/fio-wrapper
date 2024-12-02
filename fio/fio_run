@@ -652,6 +652,7 @@ loop_io_tests()
 		build_run_file $ios $ioe $iodepth $njobs $run_time $disk_list $io_test
 		cp /tmp/fio_run ${out_dir}/file_run_${test_index}
 		let "test_index=${test_index}+1"
+
 		fio --output-format=normal,json /tmp/fio_run >> $rdir/full-fio-result.txt
 		rtc=$?
 
@@ -662,6 +663,8 @@ loop_io_tests()
 		if [ $lines -lt 2 || $rtc -ne 0 ]; then
 			run_results="Failed"
 		fi
+
+		mv *.log $rdir 		# preserve raw data
 	done
 }
 
