@@ -292,7 +292,7 @@ obtain_avg_lat()
         done
         # Divide by 3 since the json output includes all three I/O types and we only care about one
         # Divide by 1000 because the json output is nsec but usec is a bit more friendly for now
-        calc="(${calc})/((${nitems}/3))/1000)"
+        calc="${calc})/(${nitems}/3)/1000"
         rtval=`echo $calc | bc`
         echo $rtval
 }
