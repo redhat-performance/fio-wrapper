@@ -260,7 +260,7 @@ report_info()
 obtain_avg()
 {
         FIELD=${1}
-        value=`cat fio-result.txt | jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"''`
+        value=`cat fio-results.json | jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"''`
         nitems=0
         calc="scale=2;("
         field_separ=""
@@ -281,7 +281,7 @@ obtain_avg()
 obtain_avg_lat()
 {
         FIELD=${1}
-        value=`cat fio-result.txt | jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'.mean'`
+        value=`cat fio-results.json | jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'.mean'`
         nitems=0
         calc="scale=2;("
         field_separ=""
@@ -680,9 +680,9 @@ loop_io_tests()
 		build_run_file $ios $ioe $iodepth $njobs $run_time $disk_list $io_test
 		cp /tmp/fio_run ${out_dir}/file_run_${test_index}
 		let "test_index=${test_index}+1"
-		fio --output-format=json /tmp/fio_run >> $rdir/fio-result.txt
+		fio --output-format=json /tmp/fio_run >> $rdir/fio-results.json
 		mv *.log $rdir 		# preserve raw data
-		lines=`wc -l $rdir/fio-result.txt | cut -d' ' -f 1`
+		lines=`wc -l $rdir/fio-results.json | cut -d' ' -f 1`
 		if [ $lines -lt 2 ]; then
 			run_results="Failed"
 		fi
