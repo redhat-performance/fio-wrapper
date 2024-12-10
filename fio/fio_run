@@ -260,7 +260,7 @@ report_info()
 obtain_avg()
 {
         FIELD=${1}
-        value=`cat fio-results.json | jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"''`
+        value=`jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'' fio-results.json`
         nitems=0
         calc="scale=2;("
         field_separ=""
@@ -269,9 +269,13 @@ obtain_avg()
                 let "nitems=$nitems+1"
                 field_separ="+"
         done
-        # Divide by 3 since the json output includes all three I/O types and we only care about one
-        calc="${calc})/(${nitems}/3)"
-        rtval=`echo $calc | bc`
+        if [ ${nitems} -eq 0]; then
+		calc=0
+	else
+		# Divide by 3 since the json output includes all three I/O types and we only care about one
+		calc="${calc})/(${nitems}/3)"
+	fi
+	rtval=`echo $calc | bc`
         echo $rtval
 }
 
@@ -281,7 +285,7 @@ obtain_avg()
 obtain_avg_lat()
 {
         FIELD=${1}
-        value=`cat fio-results.json | jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'.mean'`
+        value=`jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'.mean' fio-results.json`
         nitems=0
         calc="scale=2;("
         field_separ=""
@@ -290,9 +294,13 @@ obtain_avg_lat()
                 let "nitems=$nitems+1"
                 field_separ="+"
         done
-        # Divide by 3 since the json output includes all three I/O types and we only care about one
-        # Divide by 1000 because the json output is nsec but usec is a bit more friendly for now
-        calc="${calc})/(${nitems}/3)/1000"
+        if [ ${nitems} -eq 0]; then
+		calc=0
+	else
+		# Divide by 3 since the json output includes all three I/O types and we only care about one
+        	# Divide by 1000 because the json output is nsec but usec is a bit more friendly for now
+        	calc="${calc})/(${nitems}/3)/1000"
+	fi
         rtval=`echo $calc | bc`
         echo $rtval
 }
