@@ -1129,7 +1129,8 @@ if [ $file_count -eq 0 ]; then
 	if [[ $disks_passed != "grab_disks" ]]; then
 		device_list=`echo $disks_passed | sed "s/,/ /g"`
 		for item in $device_list; do
-			value=`file $item`
+			#dereference symlinks to handle things like multipath aliases in /dev/mapper
+			value=`file -L $item` 	
 			echo $value | grep "block special" > /dev/null
 			if [ $? -ne 0 ]; then
 				exit_out "Error: $item is not a block device" 1
