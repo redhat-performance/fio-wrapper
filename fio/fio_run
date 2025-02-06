@@ -269,7 +269,7 @@ obtain_avg()
                 let "nitems=$nitems+1"
                 field_separ="+"
         done
-        if [ ${nitems} -eq 0]; then
+        if [ ${nitems} -eq 0 ]; then
 		calc=0
 	else
 		# Divide by 3 since the json output includes all three I/O types and we only care about one
@@ -294,7 +294,7 @@ obtain_avg_lat()
                 let "nitems=$nitems+1"
                 field_separ="+"
         done
-        if [ ${nitems} -eq 0]; then
+        if [ ${nitems} -eq 0 ]; then
 		calc=0
 	else
 		# Divide by 3 since the json output includes all three I/O types and we only care about one
