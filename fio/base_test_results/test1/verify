@@ -1,0 +1,14 @@
+njobs:ndisks:iodepth:bw
+[[:digit:]]{1,}:[[:digit:]]{1,}:[[:digit:]]{1,}:[[0-9.]{1,}$
+
+njobs:ndisks:iodepth:clat
+[[:digit:]]{1,}:[[:digit:]]{1,}:[[:digit:]]{1,}:[[0-9.]{1,}$
+
+njobs:ndisks:iodepth:iops
+[[:digit:]]{1,}:[[:digit:]]{1,}:[[:digit:]]{1,}:[[0-9.]{1,}$
+
+njobs:ndisks:iodepth:lat
+[[:digit:]]{1,}:[[:digit:]]{1,}:[[:digit:]]{1,}:[[0-9.]{1,}$
+
+njobs:ndisks:iodepth:slat
+[[:digit:]]{1,}:[[:digit:]]{1,}:[[:digit:]]{1,}:[[0-9.]{1,}$
