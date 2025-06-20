@@ -20,6 +20,7 @@
 #
 # Automate the exection of the fio workload.
 
+rtc=0
 test_name="fio"
 arguments="$@"
 disk_options=""
@@ -349,6 +350,23 @@ reduce_data()
 				cd ..
 			fi
 		done
+		#
+		# Validate the run data.
+		#
+		pushd $rdir > /dev/null
+		csv_temp=`mktemp /tmp/csv_tmp.XXXXX`
+		find . -print | grep csv > $csv_temp
+		while IFS= read -r csv_file
+		do
+			$TOOLS_BIN/validate_line --results_file $csv_file --base_results_file $run_dir/base_test_results/test1/verify
+			if [[ $? -eq 1 ]]; then
+				run_results="Failed"
+				echo $csv_file fails validation.
+				rtc=1
+			fi
+		done < $csv_temp
+		rm $csv_temp
+		popd > /dev/null
 		cp ${curdir}/meta_data.yml ${curdir}/export_fio_data
 		popd > /dev/null
 	done
@@ -897,8 +915,6 @@ execute_test()
 	additional_info=`echo $additional_info | cut -d' ' -f 1`
 	results_prefix=$additional_info"user_"$to_puser"_instance_"$to_sysname"_numb_disks_"$numb_disks"_"$tuning_info
 	user=$additional_info"user_"$to_user"_instance_"$to_sysname"_numb_disks_"$numb_disks
-	pushd $working_dir > /dev/null
-	popd > /dev/null
 
 	if [ $to_pbench -eq 1 ]; then
 		cd /var/lib/pbench-agent/
@@ -1230,4 +1246,4 @@ if [ $file_count -ne 0 ]; then
 		$TOOLS_BIN/umount_filesystems --mount_pnt ${mount_location} --number_mount_pnts ${mount_index}
 	fi
 fi
-exit 0
+exit $rtc
