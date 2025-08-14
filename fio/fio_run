@@ -994,7 +994,11 @@ NO_ARGUMENTS=(
 #
 # Make sure latest is installed. 
 
-test_tools/package_tool --packages fio --no_install $to_no_install
+test_tools/package_tool --packages fio --no_packages $to_no_pkg_install
+if [[ $? -ne 0 ]]; then
+	exit_out "package_tool reported failure for fio package." 1
+fi
+
 # read arguments
 opts=$(getopt \
 	--longoptions "$(printf "%s:," "${ARGUMENT_LIST[@]}")" \
