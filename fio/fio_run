@@ -679,7 +679,7 @@ loop_block_sizes()
 #
 # Run fio outisde of the pbench harness.
 #
-straight_fio_execute()
+fio_execute()
 {
 	disk_count=$2
 	field_1=`date +%F | sed "s/-/./g"`
@@ -695,11 +695,6 @@ straight_fio_execute()
 		mkdir $out_dir
 		loop_block_sizes $out_dir $disk_count $test_index
 	done
-}
-
-fio_execute()
-{
-	straight_fio_execute $1 $2
 }
 
 #
