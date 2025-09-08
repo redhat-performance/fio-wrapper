@@ -53,21 +53,13 @@ Usage: fio-wrapper/fio/fio_run
   --jobs_min: minimum number of jobs to run
   --max_disks: maximum number of disks to run with
   --max_disks_only: Perform the run only with maximum disks
-  --pbench_samples: number of times pbench is to run each data point, default is 5
   --regression: regression run
   --runtime: run for the designated period, 60 seconds is the default
   --test_type: type of io doing.
- --use_pbench_version: Instead of running the wrappers version
-     of fio, use pbench-fio when pbench is requested
 General options
   --home_parent <value>: Our parent home directory.  If not set, defaults to current working directory.
   --host_config <value>: default is the current host name.
   --iterations <value>: Number of times to run the test, defaults to 1.
-  --pbench: use pbench-user-benchmark and place information into pbench, defaults to do not use.
-  --pbench_user <value>: user who started everything. Defaults to the current user.
-  --pbench_copy: Copy the pbench data, not move it.
-  --pbench_stats: What stats to gather. Defaults to all stats.
-  --run_label: the label to associate with the pbench run. No default setting.
   --run_user: user that is actually running the test on the test system. Defaults to user running wrapper.
   --sys_type: Type of system working with, aws, azure, hostname.  Defaults to hostname.
   --sysname: name of the system running, used in determining config files.  Defaults to hostname.
@@ -76,4 +68,3 @@ General options
   --usage: this usage message.
 ```
 
-Note: The script does not install pbench for you.  You need to do that manually.
