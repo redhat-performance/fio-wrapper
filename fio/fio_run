@@ -586,33 +586,6 @@ install_fio()
 }
 
 #
-# Execute pbench-fio
-#
-pbench_fio_execute()
-{
-	disk_list=$1
-	disk_count=$2
-	if [ $use_pbench_version -eq 1 ]; then
-		local_config="bs_${block_size}_iod_${iodepth}_ndisks_${disk_count}_disksize_${ct_disk_size}_njobs_${njobs}"
-
-		report_info "pbench-fio ${pbench_target} --block-sizes ${block_size} --iodepth ${iodepth} --numjobs ${njobs} --ioengine ${ioengine} -t ${test_type} --config ${local_config} ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size"
-		pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size
-		if [ $? != 0 ]; then
-			exit_out "pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size" 1
-		fi
-		cp -R /var/pbench-agent/*fio* ${curdir}/export_fio_data
-		working_dir=${curdir}/export_fio_data
-		mkdir ${curdir}/export_fio_data
-	else
-		cd ${curdir}
-		$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats
-		if [ $rtc != 0 ]; then
-			exit_out "$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats failed." 1
-		fi
-	fi
-}
-
-#
 # Create the file we need  for runnig fio outside of pbench.
 #
 build_run_file()
