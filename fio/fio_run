@@ -399,25 +399,26 @@ reduce_io_data()
 	for io_eng in $aio_type; do
 		mkdir $io_eng
 		cp -R *ioengine_${io_eng}* $io_eng
-		pushd $io_eng
+		pushd $io_eng > /dev/null
 		numb_disks=`ls -d fio* | cut -d'_' -f 3 | sort -u`
 		for ndisks in $numb_disks; do
 			mkdir disks_${ndisks}
 			mv fio_ndisks_${ndisks}* disks_${ndisks}
 		done
-		popd
+		popd > /dev/null
 	done
 
 	#
 	# Now process the fio data
 	#
 	for io_eng in $aio_type; do
-		pushd $io_eng
+		pushd $io_eng > /dev/null
 		for disks in `ls -d disk*`; do
-			pushd $disks
+			pushd $disks > /dev/null
 			reduce_data
-			popd
+			popd > /dev/null
 		done
+		popd > /dev/null
 	done
 }
 	
