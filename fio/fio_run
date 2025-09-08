@@ -120,7 +120,6 @@ io_engine_list=""
 njobs=0
 iodepth=0
 disk_size=0
-pbench_samples=5
 os_vendor=`uname -a | cut -d'.' -f8`
 file_count=0
 file_size=10
@@ -132,12 +131,10 @@ lvm_disk=0
 mount_location=/fio
 etcd_opts=0
 data_sync=0
-pbench_options=""
 mount_index=0
 maximum_disks=0
 jobs_list=""
 working_dir=""
-use_pbench_version=0
 results_version="1.0"
 RESULTSDIR=""
 target_count=0
@@ -894,8 +891,6 @@ ARGUMENT_LIST=(
 	"jobs_max"
 	"jobs_min"
 	"max_disks"
-	"pbench_options"
-	"pbench_samples"
 	"runtime"
 	"test_type"
 )
@@ -907,7 +902,6 @@ NO_ARGUMENTS=(
 	"lvm"
 	"max_disks_only"
 	"regression"
-	"use_pbench_version"
 )
 
 #
@@ -1006,14 +1000,6 @@ while [[ $# -gt 0 ]]; do
 			maximum_disks=1
 			shift 1
 		;;
-		--pbench_options)
-			fio_options=${2}
-			shift 2
-		;;
-		--pbench_samples)
-			pbench_samples=${2}
-			shift 2
-		;;
 		--regression)
 			regression=1
 			shift 1
@@ -1025,10 +1011,6 @@ while [[ $# -gt 0 ]]; do
 		--test_type)
 			test_type=${2}
 			shift 2
-		;;
-		--use_pbench_version)
-			use_pbench_version=1
-			shift 1
 		;;
 		-h)
 			usage $0
@@ -1112,10 +1094,6 @@ if [ $etcd_opts -eq 1 ]; then
 	if [ $file_count -eq 0 ]; then
 		file_count=1
 	fi
-	#
-	# For pbench
-	#
-	pbench_options="--file-size ${file_size_opt} --sync ${data_sync}"
 fi
 
 if [ $file_count -ne 0 ]; then
@@ -1124,13 +1102,11 @@ if [ $file_count -ne 0 ]; then
 	#
 	create_and_mount_fs
 	pfile_list=`echo ${file_list} | sed "s/ /,/g"`
-	pbench_target="--targets ${pfile_list}"
 else
 	#
 	# Targets are the disks.
 	#
 	pdisk_list=`echo ${disks} | sed "s/ /,/g"`
-	pbench_target="--targets ${pdisk_list}"
 fi
 
 execute_test
