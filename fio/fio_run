@@ -898,8 +898,6 @@ execute_test()
 	additional_info=`echo $additional_info | cut -d' ' -f 1`
 	results_prefix=$additional_info"user_"$to_puser"_instance_"$to_sysname"_numb_disks_"$numb_disks"_"$tuning_info
 	user=$additional_info"user_"$to_user"_instance_"$to_sysname"_numb_disks_"$numb_disks
-	pushd $working_dir > /dev/null
-	popd > /dev/null
 
 	if [ $to_pbench -eq 1 ]; then
 		cd /var/lib/pbench-agent/
