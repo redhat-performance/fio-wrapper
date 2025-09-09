@@ -1037,7 +1037,11 @@ if [ $file_count -eq 0 ]; then
 	fi
 fi
 
-	RESULTSDIR=${curdir}/export_fio_data
+# Set up fresh results area
+RESULTSDIR=${curdir}/export_fio_data_$(date "+%Y.%m.%d-%H.%M.%S")
+rm export_fio_data
+mkdir ${RESULTSDIR}
+ln -s ${RESULTSDIR} ${curdir}/export_fio_data
 
 install_fio
 iodepth_list=`echo $iodepth_list | sed "s/,/ /g"`
