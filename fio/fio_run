@@ -120,7 +120,6 @@ io_engine_list=""
 njobs=0
 iodepth=0
 disk_size=0
-pbench_samples=5
 os_vendor=`uname -a | cut -d'.' -f8`
 file_count=0
 file_size=10
@@ -132,12 +131,10 @@ lvm_disk=0
 mount_location=/fio
 etcd_opts=0
 data_sync=0
-pbench_options=""
 mount_index=0
 maximum_disks=0
 jobs_list=""
 working_dir=""
-use_pbench_version=0
 results_version="1.0"
 RESULTSDIR=""
 target_count=0
@@ -173,12 +170,9 @@ usage()
 	echo "  --jobs_min: minimum number of jobs to run"
 	echo "  --max_disks: maximum number of disks to run with"
 	echo "  --max_disks_only: Perform the run only with maximum disks"
-	echo "  --pbench_samples: number of times pbench is to run each data point, default is 5"
 	echo "  --regression: regression run"
 	echo "  --runtime: run for the designated period, 60 seconds is the default"
 	echo "  --test_type: type of io doing."
-	echo " --use_pbench_version: Instead of running the wrappers version"
-	echo "     of fio, use pbench-fio when pbench is requested"
 	source test_tools/general_setup --usage
 }
 #
@@ -234,10 +228,6 @@ fi
 # to_home_root: home directory
 # to_configuration: configuration information
 # to_times_to_run: number of times to run the test
-# to_pbench_copy: Copy the data to the pbench repository, not move_it.
-# to_pbench: Run the test via pbench
-# to_puser: User running pbench
-# to_run_label: Label for the run
 # to_user: User on the test system running the test
 # to_sys_type: for results info, basically aws, azure or local
 # to_sysname: name of the system
@@ -586,33 +576,6 @@ install_fio()
 }
 
 #
-# Execute pbench-fio
-#
-pbench_fio_execute()
-{
-	disk_list=$1
-	disk_count=$2
-	if [ $use_pbench_version -eq 1 ]; then
-		local_config="bs_${block_size}_iod_${iodepth}_ndisks_${disk_count}_disksize_${ct_disk_size}_njobs_${njobs}"
-
-		report_info "pbench-fio ${pbench_target} --block-sizes ${block_size} --iodepth ${iodepth} --numjobs ${njobs} --ioengine ${ioengine} -t ${test_type} --config ${local_config} ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size"
-		pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size
-		if [ $? != 0 ]; then
-			exit_out "pbench-fio $pbench_target --block-sizes ${block_size} --iodepth $iodepth --numjobs $njobs --ioengine $ioengine  --test-types $test_type --config $local_config ${pbench_options} --runtime ${run_time} --samples ${pbench_samples} --file-size $disk_size" 1
-		fi
-		cp -R /var/pbench-agent/*fio* ${curdir}/export_fio_data
-		working_dir=${curdir}/export_fio_data
-		mkdir ${curdir}/export_fio_data
-	else
-		cd ${curdir}
-		$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats
-		if [ $rtc != 0 ]; then
-			exit_out "$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats failed." 1
-		fi
-	fi
-}
-
-#
 # Create the file we need  for runnig fio outside of pbench.
 #
 build_run_file()
@@ -707,11 +670,7 @@ loop_block_sizes()
 	test_index=$3
 
 	for io_size in $bs; do
-		if [ $to_pbench -eq 0 ]; then
-			ios=`echo "${io_size}*1024" | bc`
-		else
-			ios=$io_size
-		fi
+		ios=$io_size
 		loop_io_tests $out_dir $disk_count $test_index $io_size
 	done
 }
@@ -719,7 +678,7 @@ loop_block_sizes()
 #
 # Run fio outisde of the pbench harness.
 #
-straight_fio_execute()
+fio_execute()
 {
 	disk_count=$2
 	field_1=`date +%F | sed "s/-/./g"`
@@ -735,15 +694,6 @@ straight_fio_execute()
 		mkdir $out_dir
 		loop_block_sizes $out_dir $disk_count $test_index
 	done
-}
-
-fio_execute()
-{
-	if [ $to_pbench -eq 1 ]; then
-		pbench_fio_execute $1 $2
-	else
-		straight_fio_execute $1 $2
-	fi
 }
 
 #
@@ -900,53 +850,7 @@ execute_test()
 	pushd $working_dir > /dev/null
 	popd > /dev/null
 
-	if [ $to_pbench -eq 1 ]; then
-		cd /var/lib/pbench-agent/
-		mkdir ${curdir}/export_fio_data
-		cp ${curdir}/meta_data* ${curdir}/export_fio_data
-		ls -d pbench-user* > /dev/null
-		if [ $? -ne 0 ]; then
-			for i in `ls -d fio_*`; do
-				mkdir ${curdir}/export_fio_data/$i
-				cp ${curdir}/meta_data*yml $i
-				cp $i/result.csv ${curdir}/export_fio_data/$i
-				cp $i/result.txt ${curdir}/export_fio_data/$i
-			done
-		else
-			for i in `ls -d pbench-user*`; do
-				mkdir ${curdir}/export_fio_data/$i
-				cp ${curdir}/meta_data*yml $i
-				cp $i/result.csv ${curdir}/export_fio_data/$i
-				cp $i/result.txt ${curdir}/export_fio_data/$i
-			done
-		fi
-		if [ $use_pbench_version -eq 1 ]; then
-			cd  ${curdir}/export_fio_data
-			cnt=`ls fio*/*csv | wc -l`
-			if [ $cnt -eq 0 ]; then
-				echo Failed pbench, no csv files present >> test_results_report
-			else
-				echo Ran pbench, at least some of the csv files are present. >> test_results_report
-			fi
-			cd -
-		fi
-		cd  ${curdir}
-		if [ $etcd_opts -eq 1 ]; then
-			tar hcf /tmp/results_etcd_fio_${to_tuned_setting}.tar export_fio_data
-		else
-			tar hcf /tmp/results_pbench_fio_${to_tuned_setting}.tar export_fio_data
-		fi
-		cd -
-		value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test fio --pbench_user $pbench_user --run_label $to_run_label`
-		results_prefix=`echo $value | cut -d: -f 2`
-		hostname=`echo $value | cut -d: -f 2`
-
-		if [ $etcd_opts -eq 0 ]; then
-			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/fio_run_rt=${run_time} --copy $to_pbench_copy
-		else
-			$TOOLS_BIN/pbench_copy_data --hostname "${to_puser}_${to_run_label}" --user "${to_puser}" --prefix ${results_prefix}/etcd_run_rt=${run_time} --copy $to_pbench_copy
-		fi
-	else
+	
 		cp /tmp/log ${curdir}/export_fio_data
 		rtdir=`pwd`
 		cd ${curdir}/export_fio_data
@@ -955,7 +859,7 @@ execute_test()
 		cd $rtdir
 		mv /tmp/${test_name}.out ${curdir}/export_fio_data
 		echo $run_results >> ${curdir}/export_fio_data/test_results_report
-	fi
+
 	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir ${RESULTSDIR} --test_name $test_name --tuned_setting=$to_tuned_setting --version NONE --user $to_user
 }
 
@@ -975,8 +879,6 @@ ARGUMENT_LIST=(
 	"jobs_max"
 	"jobs_min"
 	"max_disks"
-	"pbench_options"
-	"pbench_samples"
 	"runtime"
 	"test_type"
 )
@@ -988,7 +890,6 @@ NO_ARGUMENTS=(
 	"lvm"
 	"max_disks_only"
 	"regression"
-	"use_pbench_version"
 )
 
 #
@@ -1087,14 +988,6 @@ while [[ $# -gt 0 ]]; do
 			maximum_disks=1
 			shift 1
 		;;
-		--pbench_options)
-			fio_options=${2}
-			shift 2
-		;;
-		--pbench_samples)
-			pbench_samples=${2}
-			shift 2
-		;;
 		--regression)
 			regression=1
 			shift 1
@@ -1106,10 +999,6 @@ while [[ $# -gt 0 ]]; do
 		--test_type)
 			test_type=${2}
 			shift 2
-		;;
-		--use_pbench_version)
-			use_pbench_version=1
-			shift 1
 		;;
 		-h)
 			usage $0
@@ -1147,18 +1036,11 @@ if [ $file_count -eq 0 ]; then
 	fi
 fi
 
-#
-# One results dir for the entire run. Only create when $to_pbench is
-# 0.  The directory will get created when we call back in.
-#
-if [ $to_pbench -eq 0 ]; then
-	RESULTSDIR=${curdir}/export_fio_data_$(date "+%Y.%m.%d-%H.%M.%S")
-	rm export_fio_data
-	mkdir ${RESULTSDIR}
-	ln -s ${RESULTSDIR} ${curdir}/export_fio_data
-else
-	RESULTSDIR=${curdir}/export_fio_data
-fi
+# Set up fresh results area
+RESULTSDIR=${curdir}/export_fio_data_$(date "+%Y.%m.%d-%H.%M.%S")
+rm export_fio_data
+mkdir ${RESULTSDIR}
+ln -s ${RESULTSDIR} ${curdir}/export_fio_data
 
 install_fio
 iodepth_list=`echo $iodepth_list | sed "s/,/ /g"`
@@ -1204,10 +1086,6 @@ if [ $etcd_opts -eq 1 ]; then
 	if [ $file_count -eq 0 ]; then
 		file_count=1
 	fi
-	#
-	# For pbench
-	#
-	pbench_options="--file-size ${file_size_opt} --sync ${data_sync}"
 fi
 
 if [ $file_count -ne 0 ]; then
@@ -1216,13 +1094,11 @@ if [ $file_count -ne 0 ]; then
 	#
 	create_and_mount_fs
 	pfile_list=`echo ${file_list} | sed "s/ /,/g"`
-	pbench_target="--targets ${pfile_list}"
 else
 	#
 	# Targets are the disks.
 	#
 	pdisk_list=`echo ${disks} | sed "s/ /,/g"`
-	pbench_target="--targets ${pdisk_list}"
 fi
 
 execute_test
