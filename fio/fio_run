@@ -670,7 +670,7 @@ loop_block_sizes()
 	test_index=$3
 
 	for io_size in $bs; do
-		ios=$io_size
+		ios=`echo "${io_size}*1024" | bc`	# This is used to build the fio run file in loop_io_tests, fio likes the option in bytes
 		loop_io_tests $out_dir $disk_count $test_index $io_size
 	done
 }
