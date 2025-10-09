@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "rhel": [
+      "bc",
+      "fio",
+      "gcc",
+      "git",
+      "make",
+      "perf",
+      "python3",
+      "unzip",
+      "zip",
+      "pcp-zeroconf",
+      "pcp-pmda-openmetrics",
+      "pcp-pmda-denki"
+    ]
+  }
+}
+
