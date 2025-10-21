@@ -13,7 +13,18 @@
       "pcp-zeroconf",
       "pcp-pmda-openmetrics",
       "pcp-pmda-denki"
+    ],
+    "ubuntu": [
+      "bc",
+      "fio",
+      "gcc",
+      "git",
+      "make",
+      "linux-tools-generic",
+      "python3",
+      "unzip",
+      "zip",
+      "pcp-zeroconf"
     ]
   }
 }
-
