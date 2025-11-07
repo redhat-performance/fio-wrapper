@@ -1,5 +1,12 @@
 {
   "dependencies": {
+    "amzn": [
+      "bc",
+      "fio",
+      "git",
+      "unzip",
+      "zip"
+    ],
     "rhel": [
       "bc",
       "fio",
