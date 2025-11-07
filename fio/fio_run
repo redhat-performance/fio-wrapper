@@ -245,28 +245,13 @@ report_info()
 }
 
 #
-# Averaging function for json formatted bw and iops
+#  Summing function for json formatted bw and iops
 #
-obtain_avg()
+obtain_sum()
 {
         FIELD=${1}
-        value=`jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'' fio-results.json`
-        nitems=0
-        calc="scale=2;("
-        field_separ=""
-        for val in $value; do
-                calc="${calc}${field_separ}$val"
-                let "nitems=$nitems+1"
-                field_separ="+"
-        done
-        if [ ${nitems} -eq 0 ]; then
-		calc=0
-	else
-		# Divide by 3 since the json output includes all three I/O types and we only care about one
-		calc="${calc})/(${nitems}/3)"
-	fi
-	rtval=`echo $calc | bc`
-        echo $rtval
+        value=`jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'' fio-results.json | grep -w -v 0.000000`
+        echo ${value}
 }
 
 #
@@ -274,25 +259,11 @@ obtain_avg()
 #
 obtain_avg_lat()
 {
-        FIELD=${1}
-        value=`jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'.mean' fio-results.json`
-        nitems=0
-        calc="scale=2;("
-        field_separ=""
-        for val in $value; do
-                calc="${calc}${field_separ}$val"
-                let "nitems=$nitems+1"
-                field_separ="+"
-        done
-        if [ ${nitems} -eq 0 ]; then
-		calc=0
-	else
-		# Divide by 3 since the json output includes all three I/O types and we only care about one
-        	# Divide by 1000 because the json output is nsec but usec is a bit more friendly for now
-        	calc="${calc})/(${nitems}/3)/1000"
-	fi
-        rtval=`echo $calc | bc`
-        echo $rtval
+	FIELD=${1}
+	value=`jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'.mean' fio-results.json | grep -w -v 0.000000`
+	calc="${value}/1000"		# ns is a little cumbersome for now, use us
+	rtval=`echo ${calc} | bc`
+	echo ${rtval}
 }
 
 
@@ -326,8 +297,8 @@ reduce_data()
 			if [ -d "$dir" ]; then
 				fname=`echo $dir | cut -d'-' -f 2-30`
 				cd $dir
-				bw=$(obtain_avg "bw_mean")
-				iops=$(obtain_avg "iops")
+				bw=$(obtain_sum "bw_mean")
+				iops=$(obtain_sum "iops")
 				clat=$(obtain_avg_lat "clat_ns")
                                 slat=$(obtain_avg_lat "slat_ns")
                                 lat=$(obtain_avg_lat "lat_ns")
@@ -651,7 +622,7 @@ loop_io_tests()
 		build_run_file $ios $ioe $iodepth $njobs $run_time $disk_list $io_test
 		cp /tmp/fio_run ${out_dir}/file_run_${test_index}
 		let "test_index=${test_index}+1"
-		fio --output-format=json /tmp/fio_run >> $rdir/fio-results.json
+		fio --output-format=json --group_reporting /tmp/fio_run >> $rdir/fio-results.json
 		mv *.log $rdir 		# preserve raw data
 		lines=`wc -l $rdir/fio-results.json | cut -d' ' -f 1`
 		if [ $lines -lt 2 ]; then
