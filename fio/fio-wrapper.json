@@ -16,10 +16,7 @@
       "perf",
       "python3",
       "unzip",
-      "zip",
-      "pcp-zeroconf",
-      "pcp-pmda-openmetrics",
-      "pcp-pmda-denki"
+      "zip"
     ],
     "ubuntu": [
       "bc",
@@ -30,8 +27,7 @@
       "linux-tools-generic",
       "python3",
       "unzip",
-      "zip",
-      "pcp-zeroconf"
+      "zip"
     ]
   }
 }
