@@ -245,13 +245,13 @@ report_info()
 }
 
 #
-#  Summing function for json formatted bw and iops
+# Summing function for json formatted bw and iops
 #
 obtain_sum()
 {
-        FIELD=${1}
-        value=`jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'' fio-results.json | grep -w -v 0.000000`
-        echo ${value}
+	FIELD=${1}
+	value=`jq '.. | select(type == "object" and has('\"$FIELD\"')).'\"$FIELD\"'' fio-results.json | grep -w -v 0.000000`
+	echo ${value}
 }
 
 #
@@ -297,11 +297,11 @@ reduce_data()
 			if [ -d "$dir" ]; then
 				fname=`echo $dir | cut -d'-' -f 2-30`
 				cd $dir
-				bw=$(obtain_sum "bw_mean")
-				iops=$(obtain_sum "iops")
+				bw=$(obtain_avg "bw_mean")
+				iops=$(obtain_avg "iops")
 				clat=$(obtain_avg_lat "clat_ns")
-                slat=$(obtain_avg_lat "slat_ns")
-                lat=$(obtain_avg_lat "lat_ns")
+                                slat=$(obtain_avg_lat "slat_ns")
+                                lat=$(obtain_avg_lat "lat_ns")
 				echo "${njobs}:${ndisks}:${iodepth}:${bw}" >> $rdir/results_${fname}/results_bw.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${iops}" >> $rdir/results_${fname}/results_iops.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${slat}" >> $rdir/results_${fname}/results_slat.csv
@@ -317,41 +317,54 @@ reduce_data()
 	#
 	# Now sort the results csv files and place headers
 	#
-	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_fio.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $results_version --test_name $test_name
+	$TOOLS_BIN/test_header_info --test_name ${test_name}  --info_in_dir_name "$file 2,3 4,5,6 9,10" --results_file ${working_dir}/results_fio.csv
 	for list in `ls -d results_*`; do
 		pushd $list > /dev/null
 		op_and_size=`echo $list | cut -d'_' -f 2`
 		op=`echo "$op_and_size" | cut -d'-' -f1`
 		size=`echo "$op_and_size" | cut -d'-' -f2`
 		for ifile in `ls res*`; do
-			$TOOLS_BIN/test_header_info --test_name ${test_name}  --info_in_dir_name "$file 2,3 4,5,6 7,8 9,10" --meta_output "op: $op" --meta_output "size: $size" --results_file results.csv
+			# Sort the metrics
 			if [[ $ifile == *"bw"* ]]; then
-				echo "njobs:ndisks:iodepth:bw" >> results.csv
+				sort -t : -k 3 -n $ifile >> tmp_bw.csv
 			fi
 			if [[ $ifile == *"iops"* ]]; then
-                                echo "njobs:ndisks:iodepth:iops" >> results.csv
+				sort -t : -k 3 -n $ifile | cut -d : -f 4 >> tmp_iops.csv
                         fi
 			if [[ $ifile == *"_lat"* ]]; then
-				echo "njobs:ndisks:iodepth:lat" >> results.csv
+				sort -t : -k 3 -n $ifile | cut -d : -f 4 >> tmp_lat.csv
 			fi
 			if [[ $ifile == *"_clat"* ]]; then
-				echo "njobs:ndisks:iodepth:clat" >> results.csv
+				sort -t : -k 3 -n $ifile | cut -d : -f 4 >> tmp_clat.csv
 			fi
 			if [[ $ifile == *"_slat"* ]]; then
-				echo "njobs:ndisks:iodepth:slat" >> results.csv
+				sort -t : -k 3 -n $ifile | cut -d : -f 4 >> tmp_slat.csv
 			fi
-			sort -t : -k 3 -n $ifile >> results.csv
-			echo "" >> results.csv
+		done
+			# Stage the op & size fields, one line for each line of results
+			num_lines=`wc -l tmp_bw.csv | awk {'print $1'}`
+			for ct in `seq 1 ${num_lines}`; do
+				echo "${op}:${size}" | sed 's/...$//' >> tmp_ons.csv
+			done
+
+			# Now merge them together with colons as separators
+			pr -m -T -s: tmp_ons.csv tmp_bw.csv tmp_iops.csv tmp_clat.csv tmp_lat.csv tmp_slat.csv >> results.csv
 
 			cat  results.csv >> $working_dir/results_fio.csv
+
+			# Clean up after ourselves
 			rm results.csv
-		done
+			rm tmp_*.csv
+
 		popd > /dev/null
 	done
 }
 
 reduce_io_data()
 {
+	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_fio.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $results_version --test_name $test_name
+	echo "op:blocksize_KiB:njobs:ndisks:iodepth:bw_KiB_s:iops:clat_us:lat_us:slat_us" >> ${working_dir}/results_fio.csv
+
 	aio_type=`ls -d fio* | cut -d'_' -f 10 | sort -u`
 
 	#
