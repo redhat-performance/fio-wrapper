@@ -297,11 +297,11 @@ reduce_data()
 			if [ -d "$dir" ]; then
 				fname=`echo $dir | cut -d'-' -f 2-30`
 				cd $dir
-				bw=$(obtain_avg "bw_mean")
-				iops=$(obtain_avg "iops")
+				bw=$(obtain_sum "bw_mean")
+				iops=$(obtain_sum "iops")
 				clat=$(obtain_avg_lat "clat_ns")
-                                slat=$(obtain_avg_lat "slat_ns")
-                                lat=$(obtain_avg_lat "lat_ns")
+                slat=$(obtain_avg_lat "slat_ns")
+                lat=$(obtain_avg_lat "lat_ns")
 				echo "${njobs}:${ndisks}:${iodepth}:${bw}" >> $rdir/results_${fname}/results_bw.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${iops}" >> $rdir/results_${fname}/results_iops.csv
 				echo "${njobs}:${ndisks}:${iodepth}:${slat}" >> $rdir/results_${fname}/results_slat.csv
