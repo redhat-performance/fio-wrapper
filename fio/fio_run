@@ -904,12 +904,10 @@ NO_ARGUMENTS=(
 	"regression"
 )
 
-#
-# Make sure latest is installed. 
-
-test_tools/package_tool --packages fio --no_packages $to_no_pkg_install
+# Install needed packages based on what's listed in the wrapper's json file
+${TOOLS_BIN}/package_tool --no_packages $to_no_pkg_install --wrapper_config ${run_dir}/fio-wrapper.json
 if [[ $? -ne 0 ]]; then
-	exit_out "package_tool reported failure for fio package." 1
+        exit_out "package_tool reported failure installing dependencies." 1
 fi
 
 # read arguments

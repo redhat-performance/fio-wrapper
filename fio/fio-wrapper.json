@@ -1,0 +1,33 @@
+{
+  "dependencies": {
+    "amzn": [
+      "bc",
+      "fio",
+      "git",
+      "unzip",
+      "zip"
+    ],
+    "rhel": [
+      "bc",
+      "fio",
+      "gcc",
+      "git",
+      "make",
+      "perf",
+      "python3",
+      "unzip",
+      "zip"
+    ],
+    "ubuntu": [
+      "bc",
+      "fio",
+      "gcc",
+      "git",
+      "make",
+      "linux-tools-generic",
+      "python3",
+      "unzip",
+      "zip"
+    ]
+  }
+}
