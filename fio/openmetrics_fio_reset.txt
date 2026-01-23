@@ -1,0 +1,16 @@
+iteration 0
+running 0
+numthreads 0
+runtime NaN
+throughput NaN
+latency NaN
+ndisks NaN
+njobs NaN
+iodepth NaN
+operation NaN
+blksize NaN
+bw NaN
+iops NaN
+clat NaN
+slat NaN
+lat NaN
