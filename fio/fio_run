@@ -300,13 +300,17 @@ reduce_data()
 				bw=$(obtain_val "bw_mean")
 				iops=$(obtain_val "iops")
 				clat=$(obtain_avg_lat "clat_ns")
-                slat=$(obtain_avg_lat "slat_ns")
-                lat=$(obtain_avg_lat "lat_ns")
-				echo "${njobs}:${ndisks}:${iodepth}:${bw}" >> $rdir/results_${fname}/results_bw.csv
-				echo "${njobs}:${ndisks}:${iodepth}:${iops}" >> $rdir/results_${fname}/results_iops.csv
-				echo "${njobs}:${ndisks}:${iodepth}:${slat}" >> $rdir/results_${fname}/results_slat.csv
-				echo "${njobs}:${ndisks}:${iodepth}:${clat}" >> $rdir/results_${fname}/results_clat.csv
-				echo "${njobs}:${ndisks}:${iodepth}:${lat}" >> $rdir/results_${fname}/results_lat.csv
+                		slat=$(obtain_avg_lat "slat_ns")
+                		lat=$(obtain_avg_lat "lat_ns")
+				started_time=`cat start_time`
+				ended_time=`cat end_time`
+				echo "${njobs},${ndisks},${iodepth},${bw}" >> $rdir/results_${fname}/results_bw.csv
+				echo "${njobs},${ndisks},${iodepth},${iops}" >> $rdir/results_${fname}/results_iops.csv
+				echo "${njobs},${ndisks},${iodepth},${slat}" >> $rdir/results_${fname}/results_slat.csv
+				echo "${njobs},${ndisks},${iodepth},${clat}" >> $rdir/results_${fname}/results_clat.csv
+				echo "${njobs},${ndisks},${iodepth},${lat}" >> $rdir/results_${fname}/results_lat.csv
+				echo "${njobs},${ndisks},${iodepth},${started_time}" >> $rdir/results_${fname}/results_started_time.csv
+				echo "${njobs},${ndisks},${iodepth},${ended_time}" >> $rdir/results_${fname}/results_ended_time.csv
 				cd ..
 			fi
 		done
@@ -326,29 +330,35 @@ reduce_data()
 		for ifile in `ls res*`; do
 			# Sort the metrics
 			if [[ $ifile == *"bw"* ]]; then
-				sort -t : -k 3 -n $ifile >> tmp_bw.csv
+				sort -t , -k 3,3 -n $ifile >> tmp_bw.csv
 			fi
 			if [[ $ifile == *"iops"* ]]; then
-				sort -t : -k 3 -n $ifile | cut -d : -f 4 >> tmp_iops.csv
+				sort -t , -k 3,3 -n $ifile | cut -d , -f 4 >> tmp_iops.csv
                         fi
 			if [[ $ifile == *"_lat"* ]]; then
-				sort -t : -k 3 -n $ifile | cut -d : -f 4 >> tmp_lat.csv
+				sort -t , -k 3,3 -n $ifile | cut -d , -f 4 >> tmp_lat.csv
 			fi
 			if [[ $ifile == *"_clat"* ]]; then
-				sort -t : -k 3 -n $ifile | cut -d : -f 4 >> tmp_clat.csv
+				sort -t , -k 3,3 -n $ifile | cut -d , -f 4 >> tmp_clat.csv
 			fi
 			if [[ $ifile == *"_slat"* ]]; then
-				sort -t : -k 3 -n $ifile | cut -d : -f 4 >> tmp_slat.csv
+				sort -t , -k 3,3 -n $ifile | cut -d , -f 4 >> tmp_slat.csv
+			fi
+			if [[ $ifile == *"_started"* ]]; then
+				sort -t , -k 3,3 -n $ifile | cut -d , -f 4 >> tmp_start.csv
+			fi
+			if [[ $ifile == *"_ended"* ]]; then
+				sort -t , -k 3,3 -n $ifile | cut -d , -f 4 >> tmp_end.csv
 			fi
 		done
 			# Stage the op & size fields, one line for each line of results
 			num_lines=`wc -l tmp_bw.csv | awk {'print $1'}`
 			for ct in `seq 1 ${num_lines}`; do
-				echo "${op}:${size}" | sed 's/...$//' >> tmp_ons.csv
+				echo "${op},${size}" | sed 's/...$//' >> tmp_ons.csv
 			done
 
-			# Now merge them together with colons as separators
-			pr -m -T -s: tmp_ons.csv tmp_bw.csv tmp_iops.csv tmp_clat.csv tmp_lat.csv tmp_slat.csv >> results.csv
+			# Now merge them together with commas as separators
+			pr -m -T -s, tmp_ons.csv tmp_bw.csv tmp_iops.csv tmp_clat.csv tmp_lat.csv tmp_slat.csv tmp_start.csv tmp_end.csv >> results.csv
 
 			cat  results.csv >> $working_dir/results_fio.csv
 
@@ -362,8 +372,8 @@ reduce_data()
 
 reduce_io_data()
 {
-	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_fio.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $results_version --test_name $test_name
-	echo "op:blocksize_KiB:njobs:ndisks:iodepth:bw_KiB_s:iops:clat_us:lat_us:slat_us" >> ${working_dir}/results_fio.csv
+	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_fio.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $results_version --test_name $test_name --field_header "op,blocksize_KiB,njobs,ndisks,iodepth,bw_KiB_s,iops,clat_us,lat_us,slat_us"
+#	echo "op:blocksize_KiB:njobs:ndisks:iodepth:bw_KiB_s:iops:clat_us:lat_us:slat_us" >> ${working_dir}/results_fio.csv
 
 	aio_type=`ls -d fio* | cut -d'_' -f 10 | sort -u`
 
@@ -712,7 +722,9 @@ loop_io_tests()
         		echo "Log config settings to PCP archive"
         		knobs2pcp ${disk_count} ${njobs} ${iodepth} ${ios} ${io_test}	
     		fi
+		echo $(retrieve_time_stamp) > ${rdir}/start_time
 		fio --output-format=json --group_reporting /tmp/fio_run >> $rdir/fio-results.json
+		echo $(retrieve_time_stamp) > ${rdir}/end_time
 		if [[ $to_use_pcp -eq 1 ]]; then
                         echo "Log latest run results to PCP archive"
                         runresults2pcp ${rdir}
