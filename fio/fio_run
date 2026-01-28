@@ -300,8 +300,8 @@ reduce_data()
 				bw=$(obtain_val "bw_mean")
 				iops=$(obtain_val "iops")
 				clat=$(obtain_avg_lat "clat_ns")
-                		slat=$(obtain_avg_lat "slat_ns")
-                		lat=$(obtain_avg_lat "lat_ns")
+                slat=$(obtain_avg_lat "slat_ns")
+                lat=$(obtain_avg_lat "lat_ns")
 				started_time=`cat start_time`
 				ended_time=`cat end_time`
 				echo "${njobs},${ndisks},${iodepth},${bw}" >> $rdir/results_${fname}/results_bw.csv
@@ -373,7 +373,6 @@ reduce_data()
 reduce_io_data()
 {
 	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_fio.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $results_version --test_name $test_name --field_header "op,blocksize_KiB,njobs,ndisks,iodepth,bw_KiB_s,iops,clat_us,lat_us,slat_us"
-#	echo "op:blocksize_KiB:njobs:ndisks:iodepth:bw_KiB_s:iops:clat_us:lat_us:slat_us" >> ${working_dir}/results_fio.csv
 
 	aio_type=`ls -d fio* | cut -d'_' -f 10 | sort -u`
 
