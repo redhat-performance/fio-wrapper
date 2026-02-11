@@ -7,7 +7,16 @@ latency NaN
 ndisks NaN
 njobs NaN
 iodepth NaN
-operation NaN
+op_read 0
+op_write 0
+op_trim 0
+op_randread 0
+op_randwrite 0
+op_randtrim 0
+op_readwrite 0
+op_randrw 0
+op_trimwrite 0
+op_randtrimwrite 0
 blksize NaN
 bw NaN
 iops NaN

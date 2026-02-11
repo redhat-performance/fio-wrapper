@@ -300,8 +300,8 @@ reduce_data()
 				bw=$(obtain_val "bw_mean")
 				iops=$(obtain_val "iops")
 				clat=$(obtain_avg_lat "clat_ns")
-                slat=$(obtain_avg_lat "slat_ns")
-                lat=$(obtain_avg_lat "lat_ns")
+                		slat=$(obtain_avg_lat "slat_ns")
+                		lat=$(obtain_avg_lat "lat_ns")
 				started_time=`cat start_time`
 				ended_time=`cat end_time`
 				echo "${njobs},${ndisks},${iodepth},${bw}" >> $rdir/results_${fname}/results_bw.csv
@@ -373,6 +373,7 @@ reduce_data()
 reduce_io_data()
 {
 	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_fio.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $results_version --test_name $test_name --field_header "op,blocksize_KiB,njobs,ndisks,iodepth,bw_KiB_s,iops,clat_us,lat_us,slat_us"
+#	echo "op:blocksize_KiB:njobs:ndisks:iodepth:bw_KiB_s:iops:clat_us:lat_us:slat_us" >> ${working_dir}/results_fio.csv
 
 	aio_type=`ls -d fio* | cut -d'_' -f 10 | sort -u`
 
@@ -625,48 +626,65 @@ build_run_file()
 }
 
 #
-# Convert fio operation text to loggable number
+# Convert fio operation text to loggable numbers and send to PCP archive
+# Each possible op type gets its own metric in the archive,
+# 	needed for downstream database/analysis stuff
 #
 optext2opnum()
 {
+
+	# Make sure everything is zeroed
+	op_read=0
+	op_write=0
+	op_trim=0
+	op_randread=0
+	op_randwrite=0
+	op_randtrim=0
+	op_readwrite=0
+	op_randrw=0
+	op_trimwrite=0
+	op_randtrimwrite=0
+
+	# Flip the switches
 	case "${1}" in
 		read)
-			rtval=1
+			op_read=1
 			;;
 		write)
-			rtval=2
+			op_write=1
 			;;
 		# Nothing below here is used often, but including them just in case
 		trim)
-			rtval=3
+			op_trim=1
 			;;
 		randread)
-			rtval=4
+			op_randread=1
 			;;
 		randwrite)
-			rtval=5
+			op_randwrite=1
 			;;
 		randtrim)
-			rtval=6
+			op_randtrim=1
 			;;
 		rw|readwrite)
-			rtval=7
+			op_readwrite=1
 			;;
 		randrw)
-			rtval=8
+			op_randrw=1
 			;;
 		trimwrite)
-			rtval=9
+			op_trimwrite=1
 			;;
 		randtrimwrite)
-			rtval=10
+			op_randtrimwrite=1
 			;;
 		*)
 			# If we get here someone fed the wrapper a bogus io type
-			rtval=-1
 			;;
 	esac
-	echo ${rtval}
+
+	# Send 'em
+	results2pcp_multiple "op_read:${op_read},op_write:${op_write},op_trim:${op_trim},op_randread:${op_randread},op_randwrite:${op_randwrite},op_randtrim:${op_randtrim},op_readwrite:${op_readwrite},op_randrw:${op_randrw},op_trimwrite:${op_trimwrite},op_randtrimwrite:${op_randtrimwrite}"
 }
 
 #
@@ -679,8 +697,8 @@ knobs2pcp()
 	iodepth=${3}
 	iosize=${4}
 	optext=${5}
-	opnum=$(optext2opnum ${optext})
 	results2pcp_multiple "ndisks:${ndisks},njobs:${njobs},iodepth:${iodepth},blksize:${iosize},operation:${opnum}"
+	optext2opnum
 }
 
 #
