@@ -698,7 +698,7 @@ knobs2pcp()
 	iosize=${4}
 	optext=${5}
 	results2pcp_multiple "ndisks:${ndisks},njobs:${njobs},iodepth:${iodepth},blksize:${iosize},operation:${opnum}"
-	optext2opnum
+	optext2opnum ${optext}
 }
 
 #
