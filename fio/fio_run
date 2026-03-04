@@ -24,6 +24,8 @@ test_name="fio"
 arguments="$@"
 disk_options=""
 curdir=`pwd`
+header_txt="op,blocksize_KiB,njobs,ndisks,iodepth,bw_KiB_s,iops,clat_us,lat_us,slat_us,Start_Date,End_Date"
+script_dir=$(realpath $(dirname $0))
 
 #
 # Check to see if the test tools directory exists.  If it does, we do not need to
@@ -37,7 +39,7 @@ if [ ! -d "${TOOLS_BIN}" ]; then
 	git clone $tools_git $TOOLS_BIN
 	if [ $? -ne 0 ]; then
 		echo  "pulling git $tools_git failed."
-		exit $E_GENERAL
+		exit 101
 	fi
 fi
 
@@ -319,7 +321,7 @@ reduce_data()
 	# Now sort the results csv files and place headers
 	#
 	$TOOLS_BIN/test_header_info --test_name ${test_name}  --info_in_dir_name "$file 2,3 4,5,6 9,10" --results_file ${working_dir}/results_fio.csv
-	echo "op:blocksize_KiB:njobs:ndisks:iodepth:bw_KiB_s:iops:clat_us:lat_us:slat_us" >> ${working_dir}/results_fio.csv
+	echo $header_txt >> ${working_dir}/results_fio.csv
 	for list in `ls -d results_*`; do
 		pushd $list > /dev/null
 		op_and_size=`echo $list | cut -d'_' -f 2`
@@ -400,6 +402,23 @@ reduce_io_data()
 			popd
 		done
 	done
+	#
+	# Validate data
+	#
+	tmp_file=$(mktemp /tmp/fio_results.XXXXX)
+	echo $header_txt > $tmp_file
+	grep -v "^#" $working_dir/results_fio.csv | grep -v "^op" >> $tmp_file
+	${TOOLS_BIN}/csv_to_json $to_json_flags --csv_file $tmp_file --output_file results_fio.json
+	rtc=$?
+	if [[ $rtc -ne 0 ]]; then
+		exit out "Error: csv_to_json failed" $rtc
+	fi
+	${TOOLS_BIN}/verify_results $to_verify_flags --schema_file $script_dir/results_fio_schema.py --class_name Fio_Results --file results_fio.json
+
+	rtc=$?
+	if [[ $rtc -ne 0 ]]; then
+		exit_out "Error: fio data verification failed" $rtc
+	fi
 }
 	
 # Create the required file systems.
@@ -1223,6 +1242,7 @@ execute_test
 if [[ $to_use_pcp -eq 1 ]]; then
     shutdown_pcp
 fi
+
 
 if [ $file_count -ne 0 ]; then
 	if [ $lvm_disk -eq 1 ]; then
