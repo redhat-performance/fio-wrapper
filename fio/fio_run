@@ -24,6 +24,24 @@ test_name="fio"
 arguments="$@"
 disk_options=""
 curdir=`pwd`
+header_txt="op,blocksize_KiB,njobs,ndisks,iodepth,bw_KiB_s,iops,clat_us,lat_us,slat_us,Start_Date,End_Date"
+script_dir=$(realpath $(dirname $0))
+
+#
+# Check to see if the test tools directory exists.  If it does, we do not need to
+# clone the repo.
+#
+tools_git=https://github.com/redhat-performance/test_tools-wrappers
+TOOLS_BIN="$HOME/test_tools"
+export TOOLS_BIN
+
+if [ ! -d "${TOOLS_BIN}" ]; then
+	git clone $tools_git $TOOLS_BIN
+	if [ $? -ne 0 ]; then
+		echo  "pulling git $tools_git failed."
+		exit 101
+	fi
+fi
 
 provide_disks()
 {
@@ -124,7 +142,6 @@ os_vendor=`uname -a | cut -d'.' -f8`
 file_count=0
 file_size=10
 fs_type="xfs"
-tools_git=https://github.com/redhat-performance/test_tools-wrappers
 file_list=""
 file_size_opt=""
 lvm_disk=0
@@ -173,21 +190,13 @@ usage()
 	echo "  --regression: regression run"
 	echo "  --runtime: run for the designated period, 60 seconds is the default"
 	echo "  --test_type: type of io doing."
-	source test_tools/general_setup --usage
+	source ${TOOLS_BIN}/general_setup --usage
 }
 #
 # Clone the repo that contains the common code and tools
 #
 found=0
 for arg in "$@"; do
-	if [ $found -eq 1 ]; then
-		tools_git=$arg
-		found=0
-	fi
-	if [[ $arg == "--tools_git" ]]; then
-		found=1
-	fi
-
 	if [[ $found -eq 2 ]]; then
 		string1=`echo $arg | cut -d: -f2 | sed "s/;/ /g"`
 		for i in $string1; do
@@ -211,16 +220,6 @@ for arg in "$@"; do
 	fi
 done
 
-#
-# Check to see if the test tools directory exists.  If it does, we do not need to
-# clone the repo.
-#
-if [ ! -d "test_tools" ]; then
-	git clone $tools_git test_tools
-	if [ $? -ne 0 ]; then
-		exit_out "pulling git $tools_git failed." 1
-	fi
-fi
 
 # Variables set by general setup.
 #
@@ -234,7 +233,7 @@ fi
 # to_tuned_setting: tuned setting
 #
 
-source test_tools/general_setup "$@"
+source ${TOOLS_BIN}/general_setup "$@"
 
 #
 # Report information
@@ -322,6 +321,7 @@ reduce_data()
 	# Now sort the results csv files and place headers
 	#
 	$TOOLS_BIN/test_header_info --test_name ${test_name}  --info_in_dir_name "$file 2,3 4,5,6 9,10" --results_file ${working_dir}/results_fio.csv
+	echo $header_txt >> ${working_dir}/results_fio.csv
 	for list in `ls -d results_*`; do
 		pushd $list > /dev/null
 		op_and_size=`echo $list | cut -d'_' -f 2`
@@ -372,8 +372,7 @@ reduce_data()
 
 reduce_io_data()
 {
-	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_fio.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $results_version --test_name $test_name --field_header "op,blocksize_KiB,njobs,ndisks,iodepth,bw_KiB_s,iops,clat_us,lat_us,slat_us"
-#	echo "op:blocksize_KiB:njobs:ndisks:iodepth:bw_KiB_s:iops:clat_us:lat_us:slat_us" >> ${working_dir}/results_fio.csv
+	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_fio.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $results_version --test_name $test_name
 
 	aio_type=`ls -d fio* | cut -d'_' -f 10 | sort -u`
 
@@ -403,6 +402,23 @@ reduce_io_data()
 			popd
 		done
 	done
+	#
+	# Validate data
+	#
+	tmp_file=$(mktemp /tmp/fio_results.XXXXX)
+	echo $header_txt > $tmp_file
+	grep -v "^#" $working_dir/results_fio.csv | grep -v "^op" >> $tmp_file
+	${TOOLS_BIN}/csv_to_json $to_json_flags --csv_file $tmp_file --output_file results_fio.json
+	rtc=$?
+	if [[ $rtc -ne 0 ]]; then
+		exit out "Error: csv_to_json failed" $rtc
+	fi
+	${TOOLS_BIN}/verify_results $to_verify_flags --schema_file $script_dir/results_fio_schema.py --class_name Fio_Results --file results_fio.json
+
+	rtc=$?
+	if [[ $rtc -ne 0 ]]; then
+		exit_out "Error: fio data verification failed" $rtc
+	fi
 }
 	
 # Create the required file systems.
@@ -427,7 +443,7 @@ create_and_mount_fs()
 		lvm_disk_to_use=`echo $disks | sed "s/ /,/g"`
 		$TOOLS_BIN/lvm_create --devices ${lvm_disk_to_use} --lvm_vol fio --lvm_grp fio
 		if [ $? -ne 0 ]; then
-			exit_out "$TOOLS_BIN/lvm_create --devices ${lvm_disk_to_use} --lvm_vol fio --lvm_grp fio failed" 1
+			exit_out "$TOOLS_BIN/lvm_create --devices ${lvm_disk_to_use} --lvm_vol fio --lvm_grp fio failed" $E_GENERAL
 		fi
 		#
 		# Sanity setup
@@ -438,7 +454,7 @@ create_and_mount_fs()
 		#
 		$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio
 		if [ $? -ne 0 ]; then
-			exit_out "$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio failed" 1
+			exit_out "$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio failed" $E_GENERAL
 		fi
 		#
 		# Build the file list.
@@ -461,7 +477,7 @@ create_and_mount_fs()
 			mkdir -p ${mount_pnt} >& /dev/null
 			$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir $mount_pnt --device $device
 			if [ $? -ne 0 ]; then
-				exit_out "$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio failed" 1
+				exit_out "$TOOLS_BIN/create_filesystem --fs_type $fs_type --mount_dir /perf1 --device /dev/fio/fio failed" $E_GENERAL
 			fi
 			mount_list=${mount_list}${seper}${mount_pnt}
 			seper=" "
@@ -528,7 +544,7 @@ obtain_disks()
 		# to make sure the disk exist.
 		#
 		if [ $? -ne 0 ]; then
-			exit_out "grab disks failed." 1
+			exit_out "grab disks failed." $E_GENERAL
 		fi
 
 		max_disks=`echo $results | cut -d: -f 2`
@@ -563,7 +579,7 @@ install_fio()
 				#
 				# fio does not appear to be installed, bail out.
 				#
-				exit_out "fio does not exist in /bin either, aborting." 1
+				exit_out "fio does not exist in /bin either, aborting." $E_GENERAL
 			fi
 		fi
 	fi
@@ -968,7 +984,7 @@ execute_test()
 		mv /tmp/${test_name}.out ${curdir}/export_fio_data
 		echo $run_results >> ${curdir}/export_fio_data/test_results_report
 
-	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir ${RESULTSDIR} --test_name $test_name --tuned_setting=$to_tuned_setting --version NONE --user $to_user
+	${TOOLS_BIN}/save_results --curdir $curdir --home_root $to_home_root --copy_dir ${RESULTSDIR} --test_name $test_name --tuned_setting=$to_tuned_setting --version NONE --user $to_user
 }
 
 #
@@ -1001,9 +1017,10 @@ NO_ARGUMENTS=(
 )
 
 # Install needed packages based on what's listed in the wrapper's json file
-${TOOLS_BIN}/package_tool --no_packages $to_no_pkg_install --wrapper_config ${run_dir}/fio-wrapper.json
-if [[ $? -ne 0 ]]; then
-        exit_out "package_tool reported failure installing dependencies." 1
+package_tool --no_packages $to_no_pkg_install --wrapper_config ${run_dir}/fio-wrapper.json
+rtc=$?
+if [[ $rtc -ne 0 ]]; then
+        exit_out "package_tool reported failure installing dependencies." $rtc
 fi
 
 # read arguments
@@ -1132,11 +1149,11 @@ if [ $file_count -eq 0 ]; then
 			value=`file -L $item` 	
 			echo $value | grep "block special" > /dev/null
 			if [ $? -ne 0 ]; then
-				exit_out "Error: $item is not a block device" 1
+				exit_out "Error: $item is not a block device" $E_GENERAL
 			fi
-			test_tools/detect_mounts $item
+			${TOOLS_BIN}/detect_mounts $item
 			if [ $? -ne 0 ]; then
-				exit_out "Error: $item is mounted." 1
+				exit_out "Error: $item is mounted." $E_GENERAL
 			fi
 		done
 	fi
@@ -1225,6 +1242,7 @@ execute_test
 if [[ $to_use_pcp -eq 1 ]]; then
     shutdown_pcp
 fi
+
 
 if [ $file_count -ne 0 ]; then
 	if [ $lvm_disk -eq 1 ]; then
