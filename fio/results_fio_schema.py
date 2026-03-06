@@ -4,6 +4,15 @@ from enum import Enum
 class Benchmark(Enum):
     read = "read"
     write = "write"
+    trim = "trim"
+    randread = "randread"
+    randwrite = "randwrite"
+    randtrim = "randtrim"
+    rw= "rw"
+    readwrite = "randwrite"
+    randrw = "randrw"
+    trimwrite = "trimwrite"
+    randtrimwrite = "randtrimwrite"
 
 class Fio_Results (pydantic.BaseModel):
     op: Benchmark
