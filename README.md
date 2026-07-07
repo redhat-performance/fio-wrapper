@@ -11,7 +11,6 @@ The wrapper provides:
 - Support for raw block devices, filesystem-backed files, and LVM volumes.
 - Automatic NUMA-aware job count calculation.
 - Regression mode for quick validation runs.
-- etcd I/O simulation mode.
 - Result collection, CSV aggregation, and JSON validation.
 - System configuration metadata capture.
 - Integration with test_tools framework.
@@ -27,7 +26,6 @@ FIO Wrapper Options:
       querying lsblk.
   --disks <value>: Comma separated list of disk devices to use (e.g. /dev/sdb,/dev/sdc).
       If not provided, the wrapper will prompt for device selection.
-  --etcd_opts: Run an etcd I/O simulation workload.
   --file_count <value>: Number of files to create per disk mount point.
       When set to a value greater than 0, creates filesystems and uses files
       instead of raw devices. Default: 0 (use raw devices).
@@ -232,12 +230,6 @@ On a 4-NUMA-node system, `numa_node` resolves to `4`, producing the list `4,8,16
 ```
 Runs a reduced test matrix with I/O depths 1, 16, 64 using only 1 disk and then all disks.
 
-### etcd I/O simulation
-```bash
-./fio_run --disks /dev/sdb --etcd_opts
-```
-Simulates etcd I/O patterns: 2300 KiB block size, I/O depth 1, libaio I/O engine, 22 MiB file size, data sync enabled, 1 job.
-
 ### Filesystem-backed files
 ```bash
 ./fio_run --disks /dev/sdb,/dev/sdc --file_count 4 --file_size 20 --fs_type ext4
@@ -324,8 +316,6 @@ NUMA topology is used to determine the default maximum job count:
 
 The default I/O engine is `libaio` (Linux native asynchronous I/O). Multiple engines can be tested in a single run by passing a comma-separated list to `--ioengine`. Each engine produces a separate set of results directories.
 
-When `--etcd_opts` is used, the code attempts to set the I/O engine to `sync`, but due to a code bug (`ioe` is set instead of `ioengine`), the default `libaio` engine is used.
-
 ### Runtime Control
 
 Each individual FIO run executes for `--runtime` seconds (default: 120). FIO is configured with `time_based=1`, meaning it runs for the full duration regardless of how quickly the data set would otherwise be exhausted.
@@ -342,22 +332,6 @@ When `--regression` is used:
 
 This mode is intended for quick validation and CI pipelines where full sweep coverage is not required.
 
-### etcd I/O Simulation
-
-The `--etcd_opts` flag configures FIO to simulate etcd write patterns:
-
-| Parameter | Value |
-|---|---|
-| Block size | 2300 KiB |
-| I/O depth | 1 |
-| I/O engine | libaio (default; code sets `ioe=sync` but `fio_execute()` overwrites it) |
-| File size | 22 MiB |
-| Data sync | enabled (`sync=1`) |
-| Jobs | 1 |
-| File count | 1 (if not already set) |
-
-The test name changes from `fio` to `etcd` for results naming.
-
 ### FIO Job File Configuration
 
 Each FIO run generates a job file (`/tmp/fio_run`) with the following global settings:
@@ -368,7 +342,7 @@ Each FIO run generates a job file (`/tmp/fio_run`) with the following global set
 | `time_based` | `1` (run for full duration) |
 | `clocksource` | `gettimeofday` |
 | `ramp_time` | `5` seconds |
-| `sync` | `0` (or `1` when `--etcd_opts` is used) |
+| `sync` | `0` |
 | `write_bw_log` | `fio` |
 | `write_iops_log` | `fio` |
 | `write_lat_log` | `fio` |
