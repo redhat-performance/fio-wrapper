@@ -171,7 +171,6 @@ file_list=""
 file_size_opt=""
 lvm_disk=0
 mount_location=/fio
-etcd_opts=0
 data_sync=0
 mount_index=0
 maximum_disks=0
@@ -1028,7 +1027,6 @@ ARGUMENT_LIST=(
 
 NO_ARGUMENTS=(
 	"debug"
-	"etcd_opts"
 	"help"
 	"lvm"
 	"max_disks_only"
@@ -1066,11 +1064,6 @@ while [[ $# -gt 0 ]]; do
 		--disks)
 			disks_passed=${2}
 			shift 2
-		;;
-		--etcd_opts)
-			test_name="etcd"
-			etcd_opts=1
-			shift 1
 		;;
 		--file_count)
 			file_count=${2}
@@ -1217,23 +1210,6 @@ if [[ $ct_disk_size == "undef" ]]; then
 fi
 
 setup_run_information
-
-#
-# Special run setup for etcd sim.
-#
-if [ $etcd_opts -eq 1 ]; then
-	block_size=2300
-	iodepth_list=1
-	ioe=sync
-	file_size_opt=22m
-	data_sync=1
-	jobs_min=1
-	jobs_max=1
-	njobs=1
-	if [ $file_count -eq 0 ]; then
-		file_count=1
-	fi
-fi
 
 if [ $file_count -ne 0 ]; then
 	#
