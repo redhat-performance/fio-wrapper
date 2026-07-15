@@ -1187,6 +1187,16 @@ iodepth_list=`echo $iodepth_list | sed "s/,/ /g"`
 
 obtain_disks
 
+# Filter out tiny devices (e.g. cloud-init config drives on IBM Cloud)
+filtered_disks=""
+for d in $disks; do
+	sz=$(lsblk -bndo SIZE "$d" 2>/dev/null)
+	if [[ -n "$sz" ]] && [[ $sz -gt 1048576 ]]; then
+		filtered_disks="$filtered_disks $d"
+	fi
+done
+disks=$(echo $filtered_disks)
+max_disks=$(echo $disks | wc -w)
 
 if [[ $ct_disk_size == "undef" ]]; then
 	disk_temp=`mktemp /tmp/confg.XXXXX`
@@ -1202,7 +1212,7 @@ if [[ $ct_disk_size == "undef" ]]; then
 	ct_disk_size=""
 	ct_disk_separ=""
 	for i in `cat $disk_temp1`; do
-		ct_disk_size=${i}${ct_disk_size}${ct_disk_separ}
+		ct_disk_size=${ct_disk_size}${ct_disk_separ}${i}
 		ct_disk_separ='_'
 	done
 	rm $disk_temp
